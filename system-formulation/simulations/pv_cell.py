@@ -54,20 +54,30 @@ def simulate_pv_cell(
     t_post_sunset = np.zeros((HOURS-sunset)*samples_per_hour)
     t = np.linspace(0, days*HOURS, num=days*HOURS*samples_per_hour)
 
-    P_pv = np.concatenate((t_pre_sunset, pv_values, t_post_sunset), axis = None)
+    P_pv_final = []
+    for _ in range(0, days):
+        weather = np.random.randint(0, 10)
+        if weather < 4:  # Rain or fully cloudy
+            pv_values = max_power * 0.2 * np.clip((skewnorm_ + n), 0, np.inf)
+        elif weather > 6:  # Partially cloudy
+            pv_values = max_power * np.clip((skewnorm_ + n), 0, np.inf)
+            pv_values = np.multiply(pv_values, np.random.rand(ACTIVE_HOURS * samples_per_hour))
+        else:  # Sunny day
+            pv_values = max_power * np.clip((skewnorm_ + n), 0, np.inf)
+        P_pv = np.concatenate((t_pre_sunset, pv_values, t_post_sunset), axis = None)
+        P_pv_final = np.concatenate((P_pv_final, P_pv), axis=None)
 
-    P_pv = np.concatenate( ([P_pv for _ in range(days)]), axis = None )
 
     if plot:
         # Plot 
         plt.figure()
-        plt.plot(t, P_pv)
+        plt.plot(t, P_pv_final)
 
         plt.xlabel('Time [h]')
         plt.ylabel('kW')
         plt.title('Simulated PV-Cell')
     
-    return P_pv
+    return P_pv_final
 
 if __name__ == "__main__":
     simulate_pv_cell(days = 3)

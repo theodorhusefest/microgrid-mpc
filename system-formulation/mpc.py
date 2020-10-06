@@ -7,8 +7,8 @@ from open_loop import open_loop_optimization
 from simulations.pv_cell import simulate_pv_cell
 from simulations.p_load import simulate_p_load
 
-DAYS = 1
-ACTION_PER_HOUR = 2
+DAYS = 2
+ACTION_PER_HOUR = 6
 TIMEHORIZON = DAYS * 24  # timehorizon
 MAX_N = TIMEHORIZON * ACTION_PER_HOUR # Maximum prediction horizion
 
@@ -45,7 +45,7 @@ def run_mpc():
         samples_per_hour=ACTION_PER_HOUR,
         max_power=300,
         days=DAYS,
-        plot=False,
+        plot=True,
         add_noise=False)
     pl_predictied = simulate_p_load(
         samples_per_hour=ACTION_PER_HOUR,
@@ -93,15 +93,11 @@ def run_mpc():
     u1_plot = np.repeat(u1, int(60/ACTION_PER_HOUR))
     t = np.asarray(range(TIMEHORIZON*60))
 
-    print(t.shape, u0.shape, u0_plot.shape)
-    print(60/ACTION_PER_HOUR)
-    print(u0_plot[0:34])
-
     plt.figure()
     plt.plot(t, u0_plot)
     plt.plot(t, u1_plot)
     plt.xlabel('Time [h]')
-    plt.xticks(np.linspace(0, TIMEHORIZON*60, TIMEHORIZON), range(TIMEHORIZON))
+    plt.xticks(np.linspace(0, (TIMEHORIZON*60), TIMEHORIZON), range(TIMEHORIZON))
     plt.ylabel('Power [kW]')
     plt.title('Inputs')
     plt.legend(['P_Bat','P_Grid'])
