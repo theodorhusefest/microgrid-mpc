@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from scipy.stats import skewnorm
 
 def simulate_pv_cell(
-    resulution= 10,
+    samples_per_hour= 6,
     max_power= 20,
     sunrise= 8,
     sunset= 16,
@@ -34,8 +34,7 @@ def simulate_pv_cell(
 
     HOURS = 24
     ACTIVE_HOURS= sunset-sunrise
-    SAMPLES_PER_HOUR= int(60/resulution)
-    NUM_ACTIVE_DATAPOINTS= SAMPLES_PER_HOUR*ACTIVE_HOURS
+    NUM_ACTIVE_DATAPOINTS= samples_per_hour*ACTIVE_HOURS
     SKEWING_FACTOR = -3
 
     x = np.linspace(skewnorm.ppf(0.1, SKEWING_FACTOR),
@@ -51,9 +50,9 @@ def simulate_pv_cell(
 
     pv_values = max_power * np.clip((skewnorm_ + n), 0, np.inf)
 
-    t_pre_sunset = np.zeros(sunrise*SAMPLES_PER_HOUR)
-    t_post_sunset = np.zeros((HOURS-sunset)*SAMPLES_PER_HOUR)
-    t = np.linspace(0, days*HOURS, num=days*HOURS*SAMPLES_PER_HOUR)
+    t_pre_sunset = np.zeros(sunrise*samples_per_hour)
+    t_post_sunset = np.zeros((HOURS-sunset)*samples_per_hour)
+    t = np.linspace(0, days*HOURS, num=days*HOURS*samples_per_hour)
 
     P_pv = np.concatenate((t_pre_sunset, pv_values, t_post_sunset), axis = None)
 

@@ -5,7 +5,7 @@ from simulations.p_load import simulate_p_load
 DAYS= 3
 SAMPLES_PER_HOUR= 6
 T = DAYS*24  # timehorizon
-N = DAYS*24*6 # controlintervals 
+N = DAYS*24*6 # control intervals 
 
 x = MX.sym('x')
 u0 = MX.sym('u0')

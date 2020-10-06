@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from scipy.stats import skewnorm
 
 def simulate_p_load(
-    resulution= 10,
+    samples_per_hour=6,
     max_power= 100,
     min_power= 20,
     days= 1,
@@ -20,7 +20,7 @@ def simulate_p_load(
     All values outside sunset-sunrise is set to zero
 
     params:
-        resolution  [min]: Sampling time. Defaults to 10min -> 6 samples per hour
+        samples_per_hour  [min]: Sampling time. Defaults to 10min -> 6 samples per hour
         max_power   [kW]: Scaling-factor (dependent on irridation/weather/season)
         min_power   [kW]: Lifts the distribution to a minumum level
         add_noise   [bool]: Add gaussion noise to measurements
@@ -32,8 +32,7 @@ def simulate_p_load(
 
     HOURS = 24
     SKEWING_FACTOR = 4
-    SAMPLES_PER_HOUR= int(60/resulution)
-    NUM_ACTIVE_DATAPOINTS= SAMPLES_PER_HOUR*HOURS
+    NUM_ACTIVE_DATAPOINTS= samples_per_hour*HOURS
 
     x = np.linspace(skewnorm.ppf(0.1, SKEWING_FACTOR),
                 skewnorm.ppf(0.9999, SKEWING_FACTOR), NUM_ACTIVE_DATAPOINTS)
@@ -46,7 +45,7 @@ def simulate_p_load(
     skewnorm_ = skewnorm.pdf(x, SKEWING_FACTOR, loc = 1, scale=1.5)
 
     P_L = max_power * skewnorm_ + min_power + n
-    t = np.linspace(0, days*HOURS, num= days*HOURS*SAMPLES_PER_HOUR)
+    t = np.linspace(0, days*HOURS, num= days*HOURS*samples_per_hour)
 
     P_L = np.concatenate( ([P_L for _ in range(days)]), axis = None )
     if plot:
