@@ -7,8 +7,8 @@ from open_loop import open_loop_optimization
 from simulations.pv_cell import simulate_pv_cell
 from simulations.p_load import simulate_p_load
 
-DAYS = 2
-ACTION_PER_HOUR = 6
+DAYS = 1
+ACTION_PER_HOUR = 5
 TIMEHORIZON = DAYS * 24  # timehorizon
 MAX_N = TIMEHORIZON * ACTION_PER_HOUR # Maximum prediction horizion
 
@@ -21,23 +21,27 @@ def run_mpc():
 
     """
     start = time.time()
+    step_time = start
 
     x_inital = 0.8
     x_noise = True
-    constant_offset = 0.01
+    constant_offset = 0
 
     opts_open_loop = {
         "C_MAX": 700, 
-        "n_b": 0.8,
+        "nb_c": 0.8,
+        "nb_d": 0.8,
         "x_min": 0.3,
         "x_max": 0.9,
         "x_ref": 0.7,
-        "u0_max": 1000,
-        "u1_max": 500,
-        "battery_cost": 1,
-        "grid_cost": 100,
-        "ref_cost": 10,
+        "Pb_max": 1000,
+        "Pg_max": 500,
+        "battery_cost": 0.1,
+        "grid_buy": 10000,
+        "grid_sell": 1000,
+        "ref_cost": 0.1,
         "verbose": False
+
     }
     
     # Get predicted for the time period
@@ -58,9 +62,10 @@ def run_mpc():
     x = [x_inital]
     u0 = []
     u1 = []
+    u2 = []
+    u3 = []
 
     xk = x_inital
-
     for H in range(TIMEHORIZON):
         T = TIMEHORIZON - H
         N = T*ACTION_PER_HOUR
@@ -83,25 +88,54 @@ def run_mpc():
         x.append(xk)
         u0.append(uk[0])
         u1.append(uk[1])
+        u2.append(uk[2])
+        u3.append(uk[3])
+
+        print("\nFinshed iteration hour {}. Current step took {}s".format(
+            H, np.around(time.time()-step_time, 2)))
+        step_time = time.time()
 
     u0 = np.asarray(u0).flatten()
     u1 = np.asarray(u1).flatten()
+    u2 = np.asarray(u2).flatten()
+    u3 = np.asarray(u3).flatten()
 
     # Plotting
 
     u0_plot = np.repeat(u0, int(60/ACTION_PER_HOUR))
     u1_plot = np.repeat(u1, int(60/ACTION_PER_HOUR))
+    u2_plot = np.repeat(u2, int(60/ACTION_PER_HOUR))
+    u3_plot = np.repeat(u3, int(60/ACTION_PER_HOUR))
     t = np.asarray(range(TIMEHORIZON*60))
 
     plt.figure()
     plt.plot(t, u0_plot)
-    plt.plot(t, u1_plot)
+    plt.plot(t, -u1_plot)
+    plt.plot(t, u2_plot)
+    plt.plot(t, -u3_plot)
     plt.xlabel('Time [h]')
     plt.xticks(np.linspace(0, (TIMEHORIZON*60), TIMEHORIZON), range(TIMEHORIZON))
     plt.ylabel('Power [kW]')
-    plt.title('Inputs')
-    plt.legend(['P_Bat','P_Grid'])
+    plt.title('All controls')
+    plt.legend(['Pb_charge','Pb_discharge', 'Pg_buy', 'Pg_sell'])
 
+    plt.figure()
+    plt.plot(t, u0_plot)
+    plt.plot(t, -u1_plot)
+    plt.xlabel('Time [h]')
+    plt.xticks(np.linspace(0, (TIMEHORIZON*60), TIMEHORIZON), range(TIMEHORIZON))
+    plt.ylabel('Power [kW]')
+    plt.title('Battery controls')
+    plt.legend(['Pb_charge','Pb_discharge'])
+
+    plt.figure()
+    plt.plot(t, u2_plot)
+    plt.plot(t, -u3_plot)
+    plt.xlabel('Time [h]')
+    plt.xticks(np.linspace(0, (TIMEHORIZON*60), TIMEHORIZON), range(TIMEHORIZON))
+    plt.ylabel('Power [kW]')
+    plt.title('Battery controls')
+    plt.legend(['Pg_buy', 'Pg_sell'])
 
     plt.figure()
     plt.plot(range(TIMEHORIZON+1), x)
@@ -111,7 +145,7 @@ def run_mpc():
     plt.ylim([0.25, 0.95])
 
     stop = time.time()
-    print('Finished optimation on {}s'.format(np.around(stop-start, 3)))
+    print('\nFinished optimation on {}s'.format(np.around(stop-start, 2)))
 
     plt.show()
 
