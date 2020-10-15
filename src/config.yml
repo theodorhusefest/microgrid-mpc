@@ -1,0 +1,30 @@
+days: 1
+action_per_hour: 6
+openloop: False
+x_inital: 0.8
+x_noise: 0
+logpath: "./logs/"
+plot: true
+
+pv-cell:
+    max_power: 400
+    add_noise: False
+
+p-load:
+    max_power: 400
+    add_noise: False
+
+system:
+    C_MAX: 700
+    nb_c: 0.8
+    nb_d: 0.8
+    x_min: 0.3
+    x_max: 0.9
+    x_ref: 0.7
+    Pb_max: 1000
+    Pg_max: 500
+    battery_cost: 10
+    grid_buy: 1
+    grid_sell: 1
+    ref_cost: 10
+    verbose: False

@@ -1,6 +1,6 @@
 """ 
-Simulation module for PV-cell 
-Based on the real signals that looks somewhat like a sinus with max-value around 75 kW
+Simulation module for PV-load. 
+Based on the real signals that looks somewhat like a skewed normal distribution
 """
 
 import numpy as np
@@ -9,7 +9,13 @@ from scipy.stats import skewnorm
 
 
 def simulate_p_load(
-    samples_per_hour=6, max_power=100, min_power=20, days=1, add_noise=True, plot=True
+    samples_per_hour=6,
+    max_power=100,
+    min_power=20,
+    days=1,
+    add_noise=True,
+    logpath="",
+    plot=True,
 ):
     """Simulation of PV-cell
 
@@ -51,11 +57,12 @@ def simulate_p_load(
     if plot:
         # Plot
         plt.figure()
+        title = "P_load simulation"
         plt.plot(t, P_L)
-
         plt.xlabel("Time [h]")
         plt.ylabel("P_L [kW]")
-        plt.title("P_load simulation")
+        plt.title(title)
+        plt.savefig("{}-{}".format(logpath, title))
 
     return P_L
 

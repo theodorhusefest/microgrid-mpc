@@ -130,8 +130,11 @@ def open_loop_optimization(
 
     # Create an NLP solver
     prob = {"f": J, "x": vertcat(*w), "g": vertcat(*g)}
-    opts = {"verbose_init": True, "ipopt": {"print_level": 1}, "print_time": True}
-    solver = nlpsol("solver", "ipopt", prob, opts)
+    if verbose:
+        solver = nlpsol("solver", "ipopt", prob)
+    else:
+        opts = {"verbose_init": True, "ipopt": {"print_level": 1}, "print_time": True}
+        solver = nlpsol("solver", "ipopt", prob, opts)
 
     # Solve the NLP
     sol = solver(x0=w0, lbx=lbw, ubx=ubw, lbg=lbg, ubg=ubg)
@@ -140,22 +143,4 @@ def open_loop_optimization(
     x_opt = w_opt[0::5]
     u_opt = [w_opt[1::5], w_opt[2::5], w_opt[3::5], w_opt[4::5]]
 
-    if plot == True:
-        plot_control_actions(
-            [-w_opt[1::5], w_opt[2::5], w_opt[3::5], -w_opt[4::5]], T, int(N / T)
-        )
-        plot_SOC(x_opt, T)
-        plt.show()
-
     return x_opt, u_opt
-
-
-if __name__ == "__main__":
-    x_inital = 0.5
-    T = 24
-    N = 24 * 6
-
-    pv_values = simulate_pv_cell(max_power=400, days=1, plot=True, add_noise=False)
-    p_load = simulate_p_load(max_power=1500, days=1, plot=True, add_noise=False)
-
-    open_loop_optimization(x_inital, T, N, pv_values, p_load)

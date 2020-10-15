@@ -7,6 +7,7 @@ MINUTES_PER_HOUR = 60
 def plot_SOC(
     SOC,
     timehorizon,
+    logpath="./logs/",
     title="State of charge",
     xlabel="Time [h]",
     ylabel="SOC [%]",
@@ -21,13 +22,15 @@ def plot_SOC(
 
     plt.ylabel(ylabel)
     plt.title(title)
-    plt.ylim([0.25, 0.95])
+    plt.ylim([0, 1])
+    plt.savefig("{}-{}".format(logpath, title))
 
 
 def plot_control_actions(
     control,
     timehorizon,
     actions_per_hour,
+    logpath="./logs/",
     title="All controls",
     xlabel="Time [h]",
     ylabel="Power [kW]",
@@ -49,3 +52,4 @@ def plot_control_actions(
     plt.ylabel(ylabel)
     plt.title(title)
     plt.legend(legends)
+    plt.savefig("{}-{}".format(logpath, title))
