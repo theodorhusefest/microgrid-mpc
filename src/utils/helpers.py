@@ -1,12 +1,13 @@
 import os
 import shutil
 import yaml
+import pandas as pd
 from datetime import datetime
 
 
 def parse_config():
     """
-    Parses and returns configfile
+    Parses and returns configfile as dict
     """
     with open("./config.yml", "r") as f:
         conf = yaml.load(f, Loader=yaml.FullLoader)
@@ -32,10 +33,19 @@ def create_logs_folder(rootdir="./logs/"):
     create_folder(folderpath)
 
     # Save files in logs
-    files = ["./config.yml", "./main.py", "./open_loop.py"]
+    files = ["./config.yml", "./main.py", "./open_loop.py", "./system.py"]
     for f in files:
         shutil.copyfile(f, folderpath + f)
     return folderpath
+
+
+def load_datafile(datapath):
+    """
+    Reads a CSV file with real data, splits and returns it
+    """
+    data = pd.read_csv(datapath)
+    Pl = (data.P1 + data.P2).to_numpy()
+    return data.PV.to_numpy(), Pl, data.Spot_pris.to_numpy()
 
 
 if __name__ == "__main__":

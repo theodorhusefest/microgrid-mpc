@@ -84,11 +84,18 @@ def simulate_pv_cell(
         plt.xlabel("Time [h]")
         plt.ylabel("kW")
         plt.title(title)
-        plt.savefig("{}-{}".format(logpath, title))
+        if logpath:
+            plt.savefig("{}-{}".format(logpath, title + ".eps"), format="eps")
+
+    print(
+        "Created PV-cell simulation with add_noise = {}. Max_value = {}".format(
+            add_noise, np.max(P_pv_final)
+        )
+    )
 
     return P_pv_final
 
 
 if __name__ == "__main__":
-    simulate_pv_cell(days=3)
+    simulate_pv_cell(days=1)
     plt.show()

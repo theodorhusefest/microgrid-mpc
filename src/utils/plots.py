@@ -7,7 +7,7 @@ MINUTES_PER_HOUR = 60
 def plot_SOC(
     SOC,
     timehorizon,
-    logpath="./logs/",
+    logpath=None,
     title="State of charge",
     xlabel="Time [h]",
     ylabel="SOC [%]",
@@ -22,15 +22,16 @@ def plot_SOC(
 
     plt.ylabel(ylabel)
     plt.title(title)
-    plt.ylim([0, 1])
-    plt.savefig("{}-{}".format(logpath, title))
+    plt.ylim([0.25, 0.95])
+    if logpath:
+        plt.savefig("{}-{}".format(logpath, title + ".eps"), format="eps")
 
 
 def plot_control_actions(
     control,
     timehorizon,
     actions_per_hour,
-    logpath="./logs/",
+    logpath=None,
     title="All controls",
     xlabel="Time [h]",
     ylabel="Power [kW]",
@@ -52,4 +53,19 @@ def plot_control_actions(
     plt.ylabel(ylabel)
     plt.title(title)
     plt.legend(legends)
-    plt.savefig("{}-{}".format(logpath, title))
+    if logpath:
+        plt.savefig("{}-{}".format(logpath, title + ".eps"), format="eps")
+
+
+def plot_data(series, logpath=None, title="", legends=[]):
+    """
+    Plots the given series
+    """
+    plt.figure()
+    t = np.linspace(0, 24, series[0].shape[0])
+    for serie in series:
+        plt.plot(t, serie)
+    plt.title(title)
+    plt.legend(legends)
+    if logpath:
+        plt.savefig("{}-{}".format(logpath, title + ".eps"), format="eps")

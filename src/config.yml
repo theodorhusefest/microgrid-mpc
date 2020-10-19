@@ -1,17 +1,19 @@
 days: 1
 action_per_hour: 6
-openloop: False
-x_inital: 0.8
+x_inital: 0.4
 x_noise: 0
 logpath: "./logs/"
-plot: true
+datafile: "./data/load_PV3.csv"
+log: True
+grid_buy: 1.5
+grid_sell: 1.5
 
 pv-cell:
-    max_power: 400
+    max_power: 80
     add_noise: False
 
 p-load:
-    max_power: 400
+    max_power: 80
     add_noise: False
 
 system:
@@ -23,8 +25,6 @@ system:
     x_ref: 0.7
     Pb_max: 1000
     Pg_max: 500
-    battery_cost: 10
-    grid_buy: 1
-    grid_sell: 1
+    battery_cost: 0.1
     ref_cost: 10
     verbose: False

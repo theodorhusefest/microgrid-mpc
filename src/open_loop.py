@@ -1,16 +1,18 @@
+import numpy as np
 import matplotlib.pyplot as plt
 from casadi import *
 from utils.plots import plot_SOC, plot_control_actions
-from simulations.pv_cell import simulate_pv_cell
-from simulations.p_load import simulate_p_load
+from system import get_integrator
 
 
 def open_loop_optimization(
     x_inital,
     T,
     N,
-    pv_values,
-    p_load,
+    PV,
+    PL,
+    PV_pred,
+    PL_pred,
     C_MAX=700,
     nb_c=0.8,
     nb_d=0.8,
@@ -26,55 +28,32 @@ def open_loop_optimization(
     verbose=False,
     plot=True,
 ):
-
     """
     Solves the open loop optimization problem starting at x_inital,
     and till the end of the period.
+
+    x: State of charge
+
+    u0 = P_bat charge
+    u1 = P_bat discharge
+    u2 = P_grid buy
+    u3 = P_grid sell
+
+    d1 = P_PV
+    d2 = P_L
+
     """
+    actions_per_hour = int(N / T)
 
     # Define symbolic varibales
     x = MX.sym("x")
 
-    Pb_charge = MX.sym("u0")
-    Pb_discharge = MX.sym("u1")
-    Pg_buy = MX.sym("u2")
-    Pg_sell = MX.sym("u3")
+    u0 = MX.sym("u0")
+    u1 = MX.sym("u1")
+    u2 = MX.sym("u2")
+    u3 = MX.sym("u3")
 
-    d0 = MX.sym("d0")
-    d1 = MX.sym("d1")
-
-    u = vertcat(Pb_charge, Pb_discharge, Pg_buy, Pg_sell)
-    d = vertcat(d0, d1)
-
-    # ODE
-    xdot = (1 / C_MAX) * ((nb_c * Pb_charge) - (nb_d * Pb_discharge))
-
-    # Objective function
-    L = (
-        battery_cost * (Pb_charge + Pb_discharge)
-        + grid_buy * Pg_buy
-        - grid_sell * Pg_sell
-        + ref_cost * ((x_ref - x) * 100) ** 2
-    )
-
-    # Fixed step Runge-Kutta 4 integrator
-    if True:
-        M = 4  # RK4 steps per interval
-        DT = T / N / M
-        f = Function("f", [x, u, d], [xdot, L])
-        X0 = MX.sym("X0")
-        U = MX.sym("U", 4)
-        D = MX.sym("D", 2)
-        X = X0
-        Q = 0
-        for j in range(M):
-            k1, k1_q = f(X, U, D)
-            k2, k2_q = f(X + DT / 2 * k1, U, D)
-            k3, k3_q = f(X + DT / 2 * k2, U, D)
-            k4, k4_q = f(X + DT * k3, U, D)
-            X = X + DT / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
-            Q = Q + DT / 6 * (k1_q + 2 * k2_q + 2 * k3_q + k4_q)
-        F = Function("F", [X0, U, D], [X, Q], ["x0", "p", "d"], ["xf", "qf"])
+    u = vertcat(u0, u1, u2, u3)
 
     # Start with an empty NLP
     w = []
@@ -102,11 +81,26 @@ def open_loop_optimization(
         ubw += [Pb_max, Pb_max, Pg_max, Pg_max]
         w0 += [0, 0, 0, 0]
 
-        d0_k = pv_values[k]
-        d1_k = p_load[k]
+        d0_k = PV_pred[k]
+        d1_k = PL_pred[k]
 
         # Integrate till the end of the interval
-        Fk = F(x0=Xk, p=Uk, d=[d0_k, d1_k])
+        F = get_integrator(
+            T,
+            N,
+            x,
+            u,
+            x_ref=x_ref,
+            battery_cost=battery_cost,
+            grid_buy=grid_buy[k],
+            grid_sell=grid_sell[k],
+            ref_cost=ref_cost,
+            C_MAX=C_MAX,
+            nb_c=nb_c,
+            nb_d=nb_d,
+        )
+
+        Fk = F(x0=Xk, p=Uk)
         Xk_end = Fk["xf"]
         J = J + Fk["qf"]
 
@@ -143,4 +137,36 @@ def open_loop_optimization(
     x_opt = w_opt[0::5]
     u_opt = [w_opt[1::5], w_opt[2::5], w_opt[3::5], w_opt[4::5]]
 
-    return x_opt, u_opt
+    uk = get_real_u(u_opt, PV, PL, PV_pred, PL_pred, actions_per_hour)
+
+    F = get_integrator(
+        1,
+        actions_per_hour,
+        x,
+        u,
+        C_MAX=C_MAX,
+        nb_c=nb_c,
+        nb_d=nb_d,
+    )
+    Fk = F(x0=x_inital, p=uk)
+    print("x at end of interval", Fk["xf"].full().flatten()[0])
+    x_sim = Fk["xf"].full().flatten()[-1]
+    return x_sim, uk, x_opt, u_opt
+
+
+def get_real_u(u_opt, PV, PL, PV_pred, PL_pred, actions_per_hour):
+    """
+    Calculates the real inputs when there are errors between
+    prediction and real PV and load values
+    """
+    u = np.asarray([u_[0:actions_per_hour] for u_ in u_opt])
+    for k in range(actions_per_hour):
+        e_PV = PV[k] - PV_pred[k]
+        e_PL = PL[k] - PL_pred[k]
+        e_Pbat = e_PV - e_PL
+        if e_Pbat > 0:
+            u[0][k] += e_Pbat
+        else:
+            u[1][k] -= e_Pbat
+
+    return u

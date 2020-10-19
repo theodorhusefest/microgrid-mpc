@@ -62,11 +62,17 @@ def simulate_p_load(
         plt.xlabel("Time [h]")
         plt.ylabel("P_L [kW]")
         plt.title(title)
-        plt.savefig("{}-{}".format(logpath, title))
+        if logpath:
+            plt.savefig("{}-{}".format(logpath, title + ".eps"), format="eps")
 
+    print(
+        "Created load simulation with add_noise = {}. Max_value = {}".format(
+            add_noise, np.max(P_L)
+        )
+    )
     return P_L
 
 
 if __name__ == "__main__":
-    simulate_p_load(days=3)
+    simulate_p_load(days=1)
     plt.show()
