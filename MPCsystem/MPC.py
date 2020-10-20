@@ -1,18 +1,18 @@
 from casadi import *
 import numpy as np
 import matplotlib.pyplot as plt
-from pv_cell import simulate_pv_cell
-from p_load import simulate_p_load
+from pv_cellM import simulate_pv_cell
+from p_loadM import simulate_p_load
 
 
 DAYS = 1
 sim_time = DAYS * 24  # Simulation time
-T = 0.2  # Sampling time
-N = 5  # Time horizon of the MPC
+T = 1/6  # Sampling time
+N = 10  # Time horizon of the MPC
 
 pv_values = simulate_pv_cell(
     resulution=T * 60,
-    max_power=400,
+    max_power=300,
     days=DAYS,
     plot=True,
     add_noise=True)
@@ -25,11 +25,13 @@ p_load = simulate_p_load(
 
 C_max = 700  # Max battery capacity in kWh
 eta_bat = 0.8  # Efficiency of the battery charge/discharge
+scale = eta_bat/C_max  # Scaling coefficient for later use in the objective func
 
 # The cost/weights in the objective function
-battery_cost = 0.01
-grid_cost = 0.001
-ref_cost = 10000
+battery_cost = 0.1
+grid_imp_cost = 0.01
+grid_exp_cost = 0.01
+ref_cost = 1000000000
 
 # Maximum power of the controllers
 bat_max = 1000
@@ -42,8 +44,9 @@ n_states = states.shape[0]
 
 # The system has two control inputs, battery charge/discharge and the grid
 Pb = SX.sym('Pb')
-Pg = SX.sym('Pg')
-controls = vertcat(Pb, Pg)
+Pg_exp = SX.sym('Pg_exp')
+Pg_imp = SX.sym('Pg_imp')
+controls = vertcat(Pb, Pg_exp, Pg_imp)
 n_controls = controls.shape[0]
 
 """
@@ -75,9 +78,10 @@ Q = np.zeros([1, 1])
 Q[0, 0] = ref_cost
 
 # Setting weighting matrix for the controls
-R = np.zeros([2, 2])
+R = np.zeros([3, 3])
 R[0, 0] = battery_cost
-R[1, 1] = grid_cost
+R[1, 1] = grid_exp_cost
+R[2, 2] = grid_imp_cost
 
 
 st = X[:, 0]
@@ -86,7 +90,7 @@ for k in range(0, N):
     st = X[:, k]
     con = U[:, k]
     # Objective function. Penalizes difference from reference state and use of controllers.
-    obj = obj + (st - P[n_states:2 * n_states]).T @ Q @ (st - P[n_states:2 * n_states]) + con.T @ R @ con
+    obj = obj + (st - P[n_states:2 * n_states]).T @ Q @ (st - P[n_states:2 * n_states]) + (con.T/scale) @ R @ (con/scale)
     st_next = X[:, k+1]
     # 4th degree Runga-Kutta
     k1 = f(st, con)
@@ -98,7 +102,7 @@ for k in range(0, N):
 
 # Here we create the constraints.
 for k in range(0, N):
-    g = vertcat(g, U[0, k] + U[1, k] + P[n_states*2 + k] - P[n_states*2 + k + 1])
+    g = vertcat(g, U[0, k] - U[1, k] + U[2, k] + P[n_states*2 + k] - P[n_states*2 + k + 1])
 
 # Reshapes the optimal controller U since the solver takes a vector as argument. U is our optimization variables.
 OPT_variables = vertcat(reshape(X, n_states * (N+1), 1), reshape(U, n_controls*N, 1))
@@ -124,17 +128,28 @@ for i in range(0, n_states*(N+1)):
 # Constraints on the optimization variables.
 lbx = [None] * (N * n_controls + (N+1) * n_states)
 ubx = [None] * (N * n_controls + (N+1) * n_states)
-for i in range(0, (N+1) * n_states):
+for i in range(0, (N+1) * n_states):  # Constraints on the states
     lbx[i] = 0.3
     ubx[i] = 0.9
 
+"""
+# Constraints on the controllers
 for i in range((N + 1) * n_states, (N * n_controls + (N+1) * n_states), 2):
     lbx[i] = -bat_max
     ubx[i] = bat_max
     lbx[i+1] = -grid_max
     ubx[i+1] = grid_max
+"""
+for i in range((N + 1) * n_states, (N * n_controls + (N+1) * n_states), 3):
+    lbx[i] = -bat_max
+    ubx[i] = bat_max
+    lbx[i + 1] = 0
+    ubx[i + 1] = grid_max
+    lbx[i + 2] = 0
+    ubx[i + 2] = grid_max
 
-
+print(lbx)
+print(ubx)
 
 runs = int(sim_time/T) + 1
 xx = np.empty((n_states, runs))
@@ -142,18 +157,19 @@ xx1 = np.empty((runs, N+1, n_states))
 t = [None] * runs
 t0 = 0
 # Initial states
-x0 = 0.4
+x0 = 0.5
 # Reference/desired value for the states
 xs = 0.7
 xx[:, 0] = x0
 t[0] = 0
 
-u0 = np.zeros((N, 2))
+u0 = np.zeros((N, n_controls))
 X0 = repmat(x0, 1, N+1)
 mpciter = 0
 u_cl = []
 # Loops runs the MPC
 while mpciter < sim_time/T:
+    battery_cost = battery_cost * 1.3
     # x0 = x0 + np.random.randint(-10, 10)/1000
     p = vertcat(x0, xs)  # Parameter vector of initial state and the reference
     #For loop that adds the disturbance as a parameter. If the
@@ -164,10 +180,18 @@ while mpciter < sim_time/T:
                 p = vertcat(p, p_load[mpciter])
             break
         p = vertcat(p, pv_values[i])
-        p = vertcat(p, p_load[i])
+        p = vertcat(p, p_load[mpciter])
     x0_loop = vertcat(reshape(X0.T, n_states * (N+1), 1), reshape(u0.T, n_controls*N, 1))  # control inputs as the optimization variables for the solver.
     sol = solver(x0=x0_loop, lbx=lbx, ubx=ubx, lbg=lbg, ubg=ubg, p=p)  # Calculates the optimal control.
     u = reshape(sol['x'].full()[n_states*(N+1):OPT_length+1].T, n_controls, N).T  # Control is set to the new optimal control
+    # Makes sure only import or export is activated.
+    for i in range(0, N):
+        if u[i, 2] - u[i, 1] < 0:
+            u[i, 1] = u[i, 1] - u[i, 2]
+            u[i, 2] = 0
+        elif u[i, 2] - u[i, 1] >= 0:
+            u[i, 2] = u[i, 2] - u[i, 1]
+            u[i, 1] = 0
     xx1[mpciter] = reshape(sol['x'].full()[0:n_states*(N+1)].T, n_states, N+1).T  # Stores the optimal states.
     u_cl = vertcat(u_cl, u[0, :])  # Stores the the optimal control for the first time step of each horizon.
     t[mpciter] = t0
@@ -184,7 +208,6 @@ while mpciter < sim_time/T:
     xx[:, mpciter+1] = x0
     X0 = vertcat(X0[1:N+1, :], X0[N, :])
     mpciter = mpciter + 1
-
 
 plt.figure(1)
 plt.plot(t, xx[0])
