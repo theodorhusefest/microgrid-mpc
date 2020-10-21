@@ -9,6 +9,7 @@ def get_objective_function(
     Pg_sell,
     x_ref=0.7,
     battery_cost=1,
+    grid_cost=1,
     grid_buy=1,
     grid_sell=1,
     ref_cost=1,
@@ -18,8 +19,8 @@ def get_objective_function(
     """
     L = (
         battery_cost * (Pb_charge + Pb_discharge)
-        + grid_buy * Pg_buy
-        - grid_sell * Pg_sell
+        + grid_cost * grid_buy * (Pg_buy) ** 2
+        - (grid_sell / grid_cost) * (Pg_sell) ** 2
         + ref_cost * ((x_ref - x) * 100) ** 2
     )
     return L
@@ -30,7 +31,7 @@ def get_ode(x, Pb_charge, Pb_discharge, C_MAX=700, nb_c=0.8, nb_d=0.8):
     Returns the objective function.
     Can be dynamically updated
     """
-    xdot = (1 / C_MAX) * ((nb_c * Pb_charge) - (nb_d * Pb_discharge))
+    xdot = (1 / C_MAX) * ((nb_c * Pb_charge) - (Pb_discharge / nb_d))
     return xdot
 
 
@@ -41,6 +42,7 @@ def get_integrator(
     u,
     x_ref=0.8,
     battery_cost=1,
+    grid_cost=1,
     grid_buy=1,
     grid_sell=1,
     ref_cost=1,
@@ -60,6 +62,7 @@ def get_integrator(
         u[3],
         x_ref=x_ref,
         battery_cost=battery_cost,
+        grid_cost=grid_cost,
         grid_buy=grid_buy,
         grid_sell=grid_sell,
         ref_cost=ref_cost,

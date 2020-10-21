@@ -22,6 +22,7 @@ def open_loop_optimization(
     Pb_max=1000,
     Pg_max=500,
     battery_cost=1,
+    grid_cost=1,
     grid_buy=1,
     grid_sell=1,
     ref_cost=0.1,

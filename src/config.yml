@@ -1,20 +1,18 @@
 days: 1
-action_per_hour: 6
+actions_per_hour: 6
 x_inital: 0.4
-x_noise: 0
 logpath: "./logs/"
 datafile: "./data/load_PV3.csv"
-log: True
-grid_buy: 1.5
-grid_sell: 1.5
+perfect_predictions: True
+plot_predictions: False
 
-pv-cell:
-    max_power: 80
-    add_noise: False
-
-p-load:
-    max_power: 80
-    add_noise: False
+simulations:
+    pv_power: 80
+    pv_noise: False
+    pl_power: 80
+    pl_noise: False
+    grid_buy: 1.5
+    grid_sell: 1.5
 
 system:
     C_MAX: 700
@@ -24,7 +22,8 @@ system:
     x_max: 0.9
     x_ref: 0.7
     Pb_max: 1000
-    Pg_max: 500
+    Pg_max: 33
     battery_cost: 0.1
-    ref_cost: 10
+    ref_cost: 100
+    grid_cost: 10
     verbose: False
