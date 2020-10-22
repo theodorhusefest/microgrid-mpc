@@ -87,12 +87,6 @@ def simulate_pv_cell(
         if logpath:
             plt.savefig("{}-{}".format(logpath, title + ".eps"), format="eps")
 
-    print(
-        "Created PV-cell simulation with add_noise = {}. Max_value = {}".format(
-            add_noise, np.max(P_pv_final)
-        )
-    )
-
     return P_pv_final
 
 

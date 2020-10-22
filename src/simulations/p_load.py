@@ -64,12 +64,6 @@ def simulate_p_load(
         plt.title(title)
         if logpath:
             plt.savefig("{}-{}".format(logpath, title + ".eps"), format="eps")
-
-    print(
-        "Created load simulation with add_noise = {}. Max_value = {}".format(
-            add_noise, np.max(P_L)
-        )
-    )
     return P_L
 
 
