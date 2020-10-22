@@ -1,4 +1,5 @@
-days: 1
+simulation_horizon: 1
+prediction_horizon: 2
 actions_per_hour: 6
 x_inital: 0.4
 logpath: "./logs/"

@@ -26,7 +26,8 @@ def main():
     openloop = input("Run only openloop? ")
 
     actions_per_hour = conf["actions_per_hour"]
-    horizon = conf["days"] * 24  # timehorizon
+    simulation_horizon = 24 * conf["simulation_horizon"] * actions_per_hour
+    prediction_horizon = conf["prediction_horizon"] * actions_per_hour
 
     start = time.time()
     step_time = start
@@ -49,8 +50,8 @@ def main():
     u2 = np.asarray([])
     u3 = np.asarray([])
 
-    for hour in range(horizon):
-        T = horizon - hour
+    for step in range(simulation_horizon):
+        T = 1
         N = T * actions_per_hour
         xk, u, x_opt, U_opt = open_loop_optimization(
             xk,
