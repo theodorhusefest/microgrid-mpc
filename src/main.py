@@ -27,7 +27,7 @@ def main():
     openloop = input("Run openloop? ")
 
     actions_per_hour = conf["actions_per_hour"]
-    horizon = 24 * conf["simulation_horizon"]
+    horizon = conf["simulation_horizon"]
     simulation_horizon = horizon * actions_per_hour
     prediction_horizon = conf["prediction_horizon"] * actions_per_hour
 

@@ -1,4 +1,4 @@
-simulation_horizon: 24    # day
+simulation_horizon: 24    # hours
 prediction_horizon: 2     # hours
 actions_per_hour: 6
 x_inital: 0.9
