@@ -5,12 +5,12 @@ Repo for project/master thesis for optimisation of microgrid using MPC.
 Run ´pip install -r requirements.txt´ in either VM or directly on your computer.
 
 ## Run
-The code used for the optimization is location in src.  
-The config-file is used to tune parameters and metadata, and paths to datafiles.
+The code used for the optimization is located in src.  
+The config-file is used to tune parameters and metadata, and paths to datafiles.  
 When starting the program you will get two options. Both has to be confirmed with **y**, anything else is regarded as no.
 
 1. You will get the option to *log*. This will create a new folder called logs, and store all figures as well as important files (config).
-2. You can run only openloop. Confirming will break the mpc-loop after first iteration, anything else will run the closed-loop mpc.
+2. You can run only openloop. This will use the optimal SOC as the real SOC. If not running openloop, a simulated SOC will be used as measurement.
 
 At the end of the run, plots wil appear with the optimal controls and SOC.
 
