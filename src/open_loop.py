@@ -1,6 +1,8 @@
+import time
 import numpy as np
 import matplotlib.pyplot as plt
-from casadi import *
+
+from casadi import MX, nlpsol, vertcat
 from utils.plots import plot_SOC, plot_control_actions
 from system import get_integrator
 
@@ -128,7 +130,7 @@ def open_loop_optimization(
     if verbose:
         solver = nlpsol("solver", "ipopt", prob)
     else:
-        opts = {"verbose_init": True, "ipopt": {"print_level": 1}, "print_time": True}
+        opts = {"verbose_init": True, "ipopt": {"print_level": 0}, "print_time": False}
         solver = nlpsol("solver", "ipopt", prob, opts)
 
     # Solve the NLP
@@ -138,11 +140,11 @@ def open_loop_optimization(
     x_opt = w_opt[0::5]
     u_opt = [w_opt[1::5], w_opt[2::5], w_opt[3::5], w_opt[4::5]]
 
-    uk = get_real_u(u_opt, PV, PL, PV_pred, PL_pred, actions_per_hour)
+    uk = get_real_u(u_opt, PV, PL, PV_pred, PL_pred)
 
     F = get_integrator(
         1,
-        actions_per_hour,
+        1,
         x,
         u,
         C_MAX=C_MAX,
@@ -150,24 +152,22 @@ def open_loop_optimization(
         nb_d=nb_d,
     )
     Fk = F(x0=x_inital, p=uk)
-    print("x at end of interval", Fk["xf"].full().flatten()[0])
+
     x_sim = Fk["xf"].full().flatten()[-1]
     return x_sim, uk, x_opt, u_opt
 
 
-def get_real_u(u_opt, PV, PL, PV_pred, PL_pred, actions_per_hour):
+def get_real_u(u_opt, PV, PL, PV_pred, PL_pred):
     """
     Calculates the real inputs when there are errors between
     prediction and real PV and load values
     """
-    u = np.asarray([u_[0:actions_per_hour] for u_ in u_opt])
-    for k in range(actions_per_hour):
-        e_PV = PV[k] - PV_pred[k]
-        e_PL = PL[k] - PL_pred[k]
-        e_Pbat = e_PV - e_PL
-        if e_Pbat > 0:
-            u[0][k] += e_Pbat
-        else:
-            u[1][k] -= e_Pbat
-
+    u = np.asarray([u_[0] for u_ in u_opt])
+    e_PV = PV[0] - PV_pred[0]
+    e_PL = PL[0] - PL_pred[0]
+    e_Pbat = e_PV - e_PL
+    if e_Pbat > 0:
+        u[0] += e_Pbat
+    else:
+        u[1] -= e_Pbat
     return u

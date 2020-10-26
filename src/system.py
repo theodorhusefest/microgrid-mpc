@@ -1,12 +1,9 @@
-from casadi import *
+from casadi import Function, MX
 
 
 def get_objective_function(
     x,
-    Pb_charge,
-    Pb_discharge,
-    Pg_buy,
-    Pg_sell,
+    u,
     x_ref=0.7,
     battery_cost=1,
     grid_cost=1,
@@ -18,20 +15,21 @@ def get_objective_function(
     Returns the objective function
     """
     L = (
-        battery_cost * (Pb_charge + Pb_discharge)
-        + grid_cost * grid_buy * (Pg_buy) ** 2
-        - (grid_sell / grid_cost) * (Pg_sell) ** 2
+        battery_cost * (u[0] + u[1])
+        + 10 * grid_buy * u[2]
+        - 10 * grid_sell * u[3]
+        + grid_cost * (u[2] + u[3]) ** 2
         + ref_cost * ((x_ref - x) * 100) ** 2
     )
     return L
 
 
-def get_ode(x, Pb_charge, Pb_discharge, C_MAX=700, nb_c=0.8, nb_d=0.8):
+def get_ode(x, u0, u1, C_MAX=700, nb_c=0.8, nb_d=0.8):
     """
     Returns the objective function.
     Can be dynamically updated
     """
-    xdot = (1 / C_MAX) * ((nb_c * Pb_charge) - (Pb_discharge / nb_d))
+    xdot = (1 / C_MAX) * ((nb_c * u0) - (u1 / nb_d))
     return xdot
 
 
@@ -56,10 +54,7 @@ def get_integrator(
     xdot = get_ode(x, u[0], u[1], C_MAX=C_MAX, nb_c=nb_c, nb_d=nb_d)
     L = get_objective_function(
         x,
-        u[0],
-        u[1],
-        u[2],
-        u[3],
+        u,
         x_ref=x_ref,
         battery_cost=battery_cost,
         grid_cost=grid_cost,

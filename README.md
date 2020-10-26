@@ -19,8 +19,9 @@ These are the variables that can be configured in the config-file. Going outside
 
 | name 	| description 	| standard 	| range 	|
 |-	|-	|-	|-	|
-| days  	| Number of days to run the simulation for.  Computation time will increase drastically with days. 	| 1 	| [1-3] 	|
-| actions_per_hour 	| Control actions per hour. As we get data every 10 minutes, standard value is 6. (60min/h / 10min) = 6.  Computation time will increase significantly with higher value. 	| 6 	| [1-10] 	|
+| simulation_horizion  	| Number of hours to run the simulation.	| 24	| [1,-) 	|
+| prediction_horizion  	| Number of hours to predict for. This number will be multiplied with actions_per_hour. | 2	| [1,-) 	|
+| actions_per_hour 	| Control actions per hour. As we get data every 10 minutes, standard value is 6. (60min/h / 10min) = 6.  	| 6 	| [1-10] 	|
 | x_initial 	| State of charge at T=0 	| 0.9 	| [x_min-x_max] 	|
 | logpath 	| Path to logfolder. Will be created if it does not exist.  standard path is ignored by gitignore. 	| "./logs/" 	| -- 	|
 | datafile 	| Path to where to find real-data. Should be a CSV-file with the columns PV, P1, P2, Spot_pris and Grid_cap. If not provided, simulations and standard-values will be used. 	| "./data/load_PV3.csv" 	|  	|

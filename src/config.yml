@@ -1,16 +1,16 @@
-simulation_horizon: 1
-prediction_horizon: 2
+simulation_horizon: 24    # day
+prediction_horizon: 2     # hours
 actions_per_hour: 6
-x_inital: 0.4
+x_inital: 0.9
 logpath: "./logs/"
 datafile: "./data/load_PV3.csv"
 perfect_predictions: True
 plot_predictions: False
 
 simulations:
-    pv_power: 80
+    pv_power: 150
     pv_noise: False
-    pl_power: 80
+    pl_power: 25
     pl_noise: False
     grid_buy: 1.5
     grid_sell: 1.5
@@ -23,8 +23,8 @@ system:
     x_max: 0.9
     x_ref: 0.7
     Pb_max: 1000
-    Pg_max: 33
-    battery_cost: 0.1
-    ref_cost: 100
-    grid_cost: 10
+    Pg_max: 500
+    battery_cost: 1
+    ref_cost: 10
+    grid_cost: 10000
     verbose: False

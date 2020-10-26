@@ -23,13 +23,13 @@ def create_folder(folderpath):
         os.makedirs(folderpath)
 
 
-def create_logs_folder(rootdir="./logs/"):
+def create_logs_folder(rootdir="./logs/", foldername=""):
     """
     Creates a unique folder for the current run
     """
     now = datetime.now()
-    time = now.strftime("%d.%m-%H:%M/")
-    folderpath = rootdir + time
+    time = now.strftime("%d.%m-%H:%M")
+    folderpath = rootdir + time + "-" + foldername + "/"
     create_folder(folderpath)
 
     # Save files in logs
@@ -46,6 +46,22 @@ def load_datafile(datapath):
     data = pd.read_csv(datapath)
     Pl = (data.P1 + data.P2).to_numpy()
     return data.PV.to_numpy(), Pl, data.Spot_pris.to_numpy()
+
+
+def save_datafile(signals, names=[], logpath=None):
+    """
+    Saves all signals in a csvfile called signals.csv.gz
+    """
+    if not logpath:
+        return
+
+    data = {}
+    for i in range(len(names)):
+        data[names[i]] = signals[i]
+
+    df = pd.DataFrame.from_dict(data, orient="index")
+    df = df.transpose()
+    df.to_csv(logpath + "signals.csv")
 
 
 if __name__ == "__main__":
