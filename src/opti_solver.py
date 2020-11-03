@@ -7,8 +7,9 @@ from utils.plots import plot_SOC, plot_control_actions
 from system import get_integrator
 
 
-def open_loop_optimization(
+def solve_optimization(
     x_inital,
+    uk_1,
     T,
     N,
     PV,
@@ -29,7 +30,7 @@ def open_loop_optimization(
     grid_sell=1,
     ref_cost=0.1,
     verbose=False,
-    plot=True,
+    openloop=True,
 ):
     """
     Solves the open loop optimization problem starting at x_inital,
@@ -46,7 +47,6 @@ def open_loop_optimization(
     d2 = P_L
 
     """
-    actions_per_hour = int(N / T)
 
     # Define symbolic varibales
     x = MX.sym("x")
@@ -93,6 +93,7 @@ def open_loop_optimization(
             N,
             x,
             u,
+            uk_1,
             x_ref=x_ref,
             battery_cost=battery_cost,
             grid_buy=grid_buy[k],
@@ -140,13 +141,17 @@ def open_loop_optimization(
     x_opt = w_opt[0::5]
     u_opt = [w_opt[1::5], w_opt[2::5], w_opt[3::5], w_opt[4::5]]
 
-    uk = get_real_u(u_opt, PV, PL, PV_pred, PL_pred)
+    if False:
+        uk_1 = np.asarray([u_[0] for u_ in u_opt])
+        return x_opt[1], uk_1, x_opt, u_opt
 
+    uk = get_real_u(u_opt, PV, PL, PV_pred, PL_pred)
     F = get_integrator(
         1,
         1,
         x,
         u,
+        uk_1,
         C_MAX=C_MAX,
         nb_c=nb_c,
         nb_d=nb_d,
@@ -154,6 +159,7 @@ def open_loop_optimization(
     Fk = F(x0=x_inital, p=uk)
 
     x_sim = Fk["xf"].full().flatten()[-1]
+    uk_1 = np.copy(uk)
     return x_sim, uk, x_opt, u_opt
 
 
