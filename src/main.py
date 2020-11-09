@@ -56,7 +56,6 @@ def main():
     xk = conf["x_inital"]
     x_opt = np.asarray([xk])
     x_sim = np.asarray([xk])
-    uk = [0, 0, 0, 0]
     u0 = np.asarray([])
     u1 = np.asarray([])
     u2 = np.asarray([])
@@ -71,9 +70,8 @@ def main():
 
         start = step
         stop = np.min([step + prediction_horizon, simulation_horizon])
-        xk_sim, u, xk_opt, U_opt = solve_optimization(
+        xk_sim, Uk_sim, xk_opt, U_opt = solve_optimization(
             xk,
-            uk,
             T,
             N,
             PV[start:stop:],
@@ -112,8 +110,20 @@ def main():
                     step, np.around(time.time() - step_time, 2)
                 )
             )
-            print("xsim {}, x_opt {}".format(xk_sim, xk_opt[1]))
+            print(
+                "xsim {}%, x_opt {}%".format(
+                    np.around(xk_sim, 2), np.around(xk_opt[1], 2)
+                )
+            )
             step_time = time.time()
+
+        if False:
+            u0 = U_opt[0]
+            u1 = U_opt[1]
+            u2 = U_opt[2]
+            u3 = U_opt[3]
+            x_opt = xk_opt
+            break
 
     # Plotting
     u = np.asarray([-u0, u1, u2, -u3])

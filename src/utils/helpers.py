@@ -33,7 +33,7 @@ def create_logs_folder(rootdir="./logs/", foldername=""):
     create_folder(folderpath)
 
     # Save files in logs
-    files = ["./config.yml", "./main.py", "./open_loop.py", "./system.py"]
+    files = ["./config.yml", "./main.py", "./opti_solver.py", "./system.py"]
     for f in files:
         shutil.copyfile(f, folderpath + f)
     return folderpath
@@ -44,8 +44,17 @@ def load_datafile(datapath):
     Reads a CSV file with real data, splits and returns it
     """
     data = pd.read_csv(datapath)
-    Pl = (data.P1 + data.P2).to_numpy()
-    return data.PV.to_numpy(), Pl, data.Spot_pris.to_numpy()
+    PL = (data.P1 + data.P2).to_numpy()
+    try:
+        return [
+            data.PV.to_numpy(),
+            PL,
+            data.Spot_pris.to_numpy(),
+            data.PV_pred.to_numpy(),
+            data.PL_pred.to_numpy(),
+        ]
+    except AttributeError:
+        return [data.PV.to_numpy(), PL, data.Spot_pris.to_numpy()]
 
 
 def save_datafile(signals, names=[], logpath=None):
