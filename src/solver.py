@@ -1,6 +1,5 @@
 from casadi import *
 from utils.helpers import parse_config
-from system import get_integrator
 
 
 class OptiSolver:

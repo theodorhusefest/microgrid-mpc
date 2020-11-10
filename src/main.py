@@ -121,14 +121,6 @@ def main():
             )
             step_time = time.time()
 
-        if False:
-            u0 = Uk_opt[0]
-            u1 = Uk_opt[1]
-            u2 = Uk_opt[2]
-            u3 = Uk_opt[3]
-            x_opt = xk_opt
-            break
-
     # Plotting
     u = np.asarray([-u0, u1, u2, -u3])
     u_bat = np.asarray([-u0, u1])

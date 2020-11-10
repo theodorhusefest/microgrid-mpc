@@ -33,7 +33,7 @@ def create_logs_folder(rootdir="./logs/", foldername=""):
     create_folder(folderpath)
 
     # Save files in logs
-    files = ["./config.yml", "./main.py", "./solver.py", "./system.py"]
+    files = ["./config.yml", "./main.py", "./solver.py"]
     for f in files:
         shutil.copyfile(f, folderpath + f)
     return folderpath
