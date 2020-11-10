@@ -3,7 +3,7 @@ prediction_horizon: 2   # hours
 actions_per_hour: 6
 x_inital: 0.9
 logpath: "./logs/"
-datafile: "./sim-data/cloud.csv"
+datafile: "./data/cloudy.csv"
 perfect_predictions: True
 plot_predictions: True
 

@@ -33,7 +33,7 @@ def create_logs_folder(rootdir="./logs/", foldername=""):
     create_folder(folderpath)
 
     # Save files in logs
-    files = ["./config.yml", "./main.py", "./opti_solver.py", "./system.py"]
+    files = ["./config.yml", "./main.py", "./solver.py", "./system.py"]
     for f in files:
         shutil.copyfile(f, folderpath + f)
     return folderpath
@@ -59,7 +59,7 @@ def load_datafile(datapath):
 
 def save_datafile(signals, names=[], logpath=None):
     """
-    Saves all signals in a csvfile called signals.csv.gz
+    Saves all signals in a csvfile called signals.csv
     """
     if not logpath:
         return

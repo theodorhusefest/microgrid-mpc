@@ -24,7 +24,7 @@ These are the variables that can be configured in the config-file. Going outside
 | actions_per_hour 	| Control actions per hour. As we get data every 10 minutes, standard value is 6. (60min/h / 10min) = 6.  	| 6 	| [1-10] 	|
 | x_initial 	| State of charge at T=0 	| 0.9 	| [x_min-x_max] 	|
 | logpath 	| Path to logfolder. Will be created if it does not exist.  standard path is ignored by gitignore. 	| "./logs/" 	| -- 	|
-| datafile 	| Path to where to find real-data. Should be a CSV-file with the columns PV, P1, P2, Spot_pris and Grid_cap. If not provided, simulations and standard-values will be used. 	| "./data/load_PV3.csv" 	|  	|
+| datafile 	| Path to where to find real-data. Should be a CSV-file with the columns PV, P1, P2, PV_pred, PL_pred, Spot_pris and Grid_cap. If no predictions are provided, we set pred = real values. 	| "./data/load_PV3.csv" 	|  	|
 | perfect_predictions 	| Will set predictions equal to measurements. 	| True 	| True, False 	|
 | plot_predictions 	| Will plot predictions vs measurements, and save if logging is flagged. 	| False 	| True, False 	|
 | simulations.pv_power 	| Peak power for simulated PV-cells 	| 80 	| [0, -) 	|
@@ -47,16 +47,10 @@ These are the variables that can be configured in the config-file. Going outside
 | system.verbose 	| Flag for printing output from the NLP-solver 	| False 	| True, False 	|
 
 ### main.py
-Contains the mpc-loop as well as reads data etc.
+Contains the mpc-loop.
 
-### open_loop.py
+### solver.py
 Contains the optimization-problem that will be solved every hour.
 
-### system.py
-Contains the most important parts of the system, cost-function, ODE and Runge-Kutta integrator.
-
 ### simulations
-Folder where all simulations are made.
-
-
-
+Collects datafile
