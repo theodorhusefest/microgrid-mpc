@@ -4,28 +4,27 @@ from system import get_integrator
 
 
 class OptiSolver:
-    def __init__(self, T, N):
-
-        self.T = T
-        self.N = N
+    def __init__(self):
 
         conf = parse_config()
+        conf_system = conf["system"]
 
         # Get system constants
-        self.C_MAX = conf["C_MAX"]
-        self.nb_c = conf["nb_c"]
-        self.nb_d = conf["nb_d"]
-        self.x_min = conf["x_min"]
-        self.x_max = conf["x_max"]
-        self.x_ref = conf["x_ref"]
-        self.Pb_max = conf["Pb_max"]
-        self.Pg_max = conf["Pg_max"]
-        self.battery_cost = conf["battery_cost"]
-        self.grid_cost = conf["grid_cost"]
-        self.grid_buy = conf["grid_buy"]
-        self.grid_sell = conf["grid_sell"]
-        self.ref_cost = conf["ref_cost"]
-        self.verbose = conf["verbose"]
+        self.C_MAX = conf_system["C_MAX"]
+        self.nb_c = conf_system["nb_c"]
+        self.nb_d = conf_system["nb_d"]
+        self.x_min = conf_system["x_min"]
+        self.x_max = conf_system["x_max"]
+        self.x_ref = conf_system["x_ref"]
+        self.Pb_max = conf_system["Pb_max"]
+        self.Pg_max = conf_system["Pg_max"]
+        self.battery_cost = conf_system["battery_cost"]
+        self.grid_cost = conf_system["grid_cost"]
+        self.ref_cost = conf_system["ref_cost"]
+        self.verbose = conf_system["verbose"]
+
+        self.grid_buy = conf["simulations"]["grid_buy"]
+        self.grid_sell = conf["simulations"]["grid_sell"]
 
         # Define symbolic variables
         self.x = MX.sym("x")
@@ -38,8 +37,8 @@ class OptiSolver:
 
         # Initialize system properties
         self.xdot = self.build_ode()
-        self.L = None
-        self.integrator = None
+        self.L = self.build_objective_function()
+        self.F = None
         self.solver = None
 
     def build_ode(self):
@@ -51,7 +50,7 @@ class OptiSolver:
 
     def build_objective_function(self):
 
-        self.L = (
+        return (
             self.battery_cost * (self.u0 + self.u1)
             + 10 * self.grid_buy * self.u2
             - 10 * self.grid_sell * self.u3
@@ -59,13 +58,13 @@ class OptiSolver:
             + self.ref_cost * ((self.x_ref - self.x) * 100) ** 2
         )
 
-    def build_integrator(self):
+    def build_integrator(self, T, N):
         """
         Creates the given integrator for the current system.
         """
 
         M = 4  # RK4 steps per interval
-        DT = self.T / self.N / M
+        DT = T / N / M
         f = Function("f", [self.x, self.u], [self.xdot, self.L])
         X0 = MX.sym("X0")
         U = MX.sym("U", 4)
@@ -78,12 +77,12 @@ class OptiSolver:
             k4, k4_q = f(X + DT * k3, U)
             X = X + DT / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
             Q = Q + DT / 6 * (k1_q + 2 * k2_q + 2 * k3_q + k4_q)
-        return Function("F", [X0, U], [X, Q], ["x0", "p"], ["xf", "qf"])
+        self.F = Function("F", [X0, U], [X, Q], ["x0", "p"], ["xf", "qf"])
 
     def solve_nlp(self, params):
         # Solve the NLP
         sol = self.solver(
-            x0=params[0], lbx=params[0], ubx=params[0], lbg=params[0], ubg=params[0]
+            x0=params[0], lbx=params[1], ubx=params[2], lbg=params[3], ubg=params[4]
         )
         w_opt = sol["x"].full().flatten()
 
@@ -92,7 +91,7 @@ class OptiSolver:
 
         return x_opt, u_opt
 
-    def build_nlp(self, x_inital, PV_pred, PL_pred):
+    def build_nlp(self, T, N, x_inital, PV_pred, PL_pred):
 
         # Start with an empty NLP
         w = []
@@ -112,7 +111,7 @@ class OptiSolver:
         w0 += [x_inital]
 
         # Formulate the NLP
-        for k in range(self.N):
+        for k in range(N):
             # New NLP variable for the control
             Uk = MX.sym("U_" + str(k), 4)
             w += [Uk]
@@ -124,18 +123,19 @@ class OptiSolver:
             d1_k = PL_pred[k]
 
             # Integrate till the end of the interval
-            F = self.build_integrator()
+            self.build_integrator(T, N)
 
-            Fk = F(x0=Xk, p=Uk)
+            Fk = self.F(x0=Xk, p=Uk)
             Xk_end = Fk["xf"]
             J = J + Fk["qf"]
 
             # New NLP variable for state at end of interval
             Xk = MX.sym("X_" + str(k + 1))
             w += [Xk]
+
             lbw += [self.x_min]
             ubw += [self.x_max]
-            w0 += []
+            w0 += [0]
 
             # Add equality constraints
             g += [

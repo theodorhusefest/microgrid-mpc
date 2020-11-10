@@ -4,7 +4,8 @@ import matplotlib.pyplot as plt
 import utils.plots as p
 from utils.helpers import create_logs_folder, parse_config, load_datafile, save_datafile
 from simulations.simulate import get_simulations
-from opti_solver import solve_optimization
+from simulations.simulate_SOC import simulate_SOC
+from solver import OptiSolver
 
 
 def main():
@@ -17,8 +18,6 @@ def main():
     """
     conf = parse_config()
 
-    cost = 0
-
     logpath = None
     log = input("Do you wish to log this run? ")
 
@@ -28,6 +27,7 @@ def main():
 
     openloop = input("Run openloop? ")
 
+    T = conf["prediction_horizon"]
     actions_per_hour = conf["actions_per_hour"]
     horizon = conf["simulation_horizon"]
     simulation_horizon = horizon * actions_per_hour
@@ -54,6 +54,7 @@ def main():
     print("Actual energy surplus/deficit:", np.sum(PV) - np.sum(PL))
 
     xk = conf["x_inital"]
+    xk_sim = conf["x_inital"]
     x_opt = np.asarray([xk])
     x_sim = np.asarray([xk])
     u0 = np.asarray([])
@@ -61,30 +62,37 @@ def main():
     u2 = np.asarray([])
     u3 = np.asarray([])
 
+    solver = OptiSolver()
+
     for step in range(simulation_horizon):
         if step + prediction_horizon <= simulation_horizon:
-            T = prediction_horizon
+            N = prediction_horizon
         else:
-            T = simulation_horizon - step
-        N = T
+            N = simulation_horizon - step
 
         start = step
         stop = np.min([step + prediction_horizon, simulation_horizon])
-        xk_sim, Uk_sim, xk_opt, U_opt = solve_optimization(
-            xk,
+
+        nlp_params = solver.build_nlp(
             T,
             N,
+            xk,
+            PV_pred[start:stop:],
+            PL_pred[start:stop:],
+        )
+        xk_opt, Uk_opt = solver.solve_nlp(nlp_params)
+        x_opt = np.append(x_opt, xk_opt[1])
+
+        xk_sim, Uk_sim = simulate_SOC(
+            xk_sim,
+            Uk_opt,
             PV[start:stop:],
             PL[start:stop:],
             PV_pred[start:stop:],
             PL_pred[start:stop:],
-            **conf["system"],
-            grid_buy=grid_buy[start:stop:],
-            grid_sell=grid_sell[start:stop:],
-            openloop=conf["perfect_predictions"],
+            solver.F,
         )
 
-        x_opt = np.append(x_opt, xk_opt[1])
         x_sim = np.append(x_sim, xk_sim)
 
         if openloop in ["y", "yes", "Yes"]:
@@ -93,16 +101,12 @@ def main():
             xk = xk_sim  # xk is simulated difference between measurements and predictions
 
         # Get the next control actions
-        uk = [u[0] for u in U_opt]
+        uk = [u[0] for u in Uk_opt]
 
         u0 = np.append(u0, uk[0])
         u1 = np.append(u1, uk[1])
         u2 = np.append(u2, uk[2])
         u3 = np.append(u3, uk[3])
-
-        cost += calulculate_cost(
-            uk[0], uk[1], uk[2], uk[3], grid_buy[step], grid_sell[step]
-        )
 
         if step % 10 == 0:
             print(
@@ -118,10 +122,10 @@ def main():
             step_time = time.time()
 
         if False:
-            u0 = U_opt[0]
-            u1 = U_opt[1]
-            u2 = U_opt[2]
-            u3 = U_opt[3]
+            u0 = Uk_opt[0]
+            u1 = Uk_opt[1]
+            u2 = Uk_opt[2]
+            u3 = Uk_opt[3]
             x_opt = xk_opt
             break
 
@@ -159,7 +163,6 @@ def main():
 
     stop = time.time()
     print("\nFinished optimation in {}s".format(np.around(stop - start_time, 2)))
-    print("\nTotal cost:", cost)
     save_datafile(
         [x_opt, x_sim, u0, u1, u2, u3, PV, PV_pred, PL, PL_pred],
         names=[
@@ -177,15 +180,6 @@ def main():
         logpath=logpath,
     )
     plt.show()
-
-
-def calulculate_cost(u0, u1, u2, u3, grid_buy, grid_sell):
-    """
-    Calulated money spend on energy that day.
-    """
-    # print("Bought {} kW at {}, sold {} kW at {}.\n".format(u2, grid_buy, u3, grid_sell))
-    grid_cost = u2 * grid_buy - u3 * grid_sell
-    return grid_cost / 6
 
 
 if __name__ == "__main__":

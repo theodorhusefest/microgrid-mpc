@@ -1,22 +1,14 @@
-from system import get_integrator
+import numpy as np
+import matplotlib.pyplot as plt
+from casadi import MX, vertcat, Function
 
 
-def simulate_SOC(x, u_opt, PV, PV, PV_pred, PL_pred):
-    uk = get_real_u(u_opt, PV, PL, PV_pred, PL_pred)
+def simulate_SOC(x, u_opt, PV, PL, PV_pred, PL_pred, F, C_MAX=700, nb_c=0.8, nb_d=0.8):
+    uk_sim = get_real_u(u_opt, PV, PL, PV_pred, PL_pred)
+    Fk = F(x0=x, p=uk_sim)
 
-    F = get_integrator(
-        1,
-        1,
-        x,
-        u,
-        C_MAX=C_MAX,
-        nb_c=nb_c,
-        nb_d=nb_d,
-    )
-    Fk = F(x0=x_inital, p=uk)
-
-    x_sim = Fk["xf"].full().flatten()[-1]
-    return x_sim, uk, x_opt, u_opt
+    xk_sim = Fk["xf"].full().flatten()[0]
+    return xk_sim, uk_sim
 
 
 def get_real_u(u_opt, PV, PL, PV_pred, PL_pred):

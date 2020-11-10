@@ -1,10 +1,10 @@
 simulation_horizon: 24    # hours
 prediction_horizon: 2   # hours
 actions_per_hour: 6
-x_inital: 0.3
+x_inital: 0.9
 logpath: "./logs/"
-datafile: "./data/cloudy4.csv"
-perfect_predictions: False
+datafile: "./sim-data/cloud.csv"
+perfect_predictions: True
 plot_predictions: True
 
 simulations:
@@ -21,10 +21,10 @@ system:
     nb_d: 0.8
     x_min: 0.3
     x_max: 0.9
-    x_ref: 0.9
+    x_ref: 0.7
     Pb_max: 1000
-    Pg_max: 33
+    Pg_max: 500
     battery_cost: 0.01
     ref_cost: 0.2
-    grid_cost: 100000
+    grid_cost: 1000
     verbose: False
