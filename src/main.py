@@ -54,6 +54,7 @@ def main():
     print("Actual energy surplus/deficit:", np.sum(PV) - np.sum(PL))
 
     xk = conf["x_inital"]
+    x0 = conf["x_inital"]
     xk_sim = conf["x_inital"]
     x_opt = np.asarray([xk])
     x_sim = np.asarray([xk])
@@ -63,24 +64,27 @@ def main():
     u3 = np.asarray([])
 
     solver = OptiSolver()
+    N = prediction_horizon
+
+    nlp_cons = solver.build_nlp(
+            T,
+            N,
+            xk
+        )
+    x0 = nlp_cons[0]
+
 
     for step in range(simulation_horizon):
         if step + prediction_horizon <= simulation_horizon:
             N = prediction_horizon
         else:
             N = simulation_horizon - step
+        x0[0] = xk
 
         start = step
         stop = np.min([step + prediction_horizon, simulation_horizon])
 
-        nlp_params = solver.build_nlp(
-            T,
-            N,
-            xk,
-            PV_pred[start:stop:],
-            PL_pred[start:stop:],
-        )
-        xk_opt, Uk_opt = solver.solve_nlp(nlp_params)
+        xk_opt, Uk_opt = solver.solve_nlp(x0, nlp_cons, PV_pred[start:stop:], PL_pred[start:stop:])
         x_opt = np.append(x_opt, xk_opt[1])
 
         xk_sim, Uk_sim = simulate_SOC(
@@ -94,7 +98,6 @@ def main():
         )
 
         x_sim = np.append(x_sim, xk_sim)
-
         if openloop in ["y", "yes", "Yes"]:
             xk = xk_opt[1]  # xk is optimal
         else:

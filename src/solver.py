@@ -21,16 +21,19 @@ class OptiSolver:
         self.grid_cost = conf_system["grid_cost"]
         self.ref_cost = conf_system["ref_cost"]
         self.verbose = conf_system["verbose"]
+        self.pred_horizon = conf["prediction_horizon"] * conf["actions_per_hour"]
 
         self.grid_buy = conf["simulations"]["grid_buy"]
         self.grid_sell = conf["simulations"]["grid_sell"]
 
         # Define symbolic variables
-        self.x = MX.sym("x")
-        self.u0 = MX.sym("u0")
-        self.u1 = MX.sym("u1")
-        self.u2 = MX.sym("u2")
-        self.u3 = MX.sym("u3")
+        self.x = SX.sym("x")
+        self.u0 = SX.sym("u0")
+        self.u0 = SX.sym("u0")
+        self.u1 = SX.sym("u1")
+        self.u2 = SX.sym("u2")
+        self.u3 = SX.sym("u3")
+        self.parameters = SX.sym('P', 2 * self.pred_horizon)
 
         self.u = vertcat(self.u0, self.u1, self.u2, self.u3)
 
@@ -65,8 +68,8 @@ class OptiSolver:
         M = 4  # RK4 steps per interval
         DT = T / N / M
         f = Function("f", [self.x, self.u], [self.xdot, self.L])
-        X0 = MX.sym("X0")
-        U = MX.sym("U", 4)
+        X0 = SX.sym("X0")
+        U = SX.sym("U", 4)
         X = X0
         Q = 0
         for _ in range(M):
@@ -78,10 +81,15 @@ class OptiSolver:
             Q = Q + DT / 6 * (k1_q + 2 * k2_q + 2 * k3_q + k4_q)
         self.F = Function("F", [X0, U], [X, Q], ["x0", "p"], ["xf", "qf"])
 
-    def solve_nlp(self, params):
+    def solve_nlp(self, xk, cons, PV_preds, PL_preds):
         # Solve the NLP
+        if len(PL_preds) < self.pred_horizon:
+            while len(PL_preds) < self.pred_horizon:
+                PL_preds = np.append(PL_preds, PL_preds[-1])
+                PV_preds = np.append(PV_preds, PV_preds[-1])
+        param = vertcat(PV_preds, PL_preds)
         sol = self.solver(
-            x0=params[0], lbx=params[1], ubx=params[2], lbg=params[3], ubg=params[4]
+            x0=xk, lbx=cons[1], ubx=cons[2], lbg=cons[3], ubg=cons[4], p=param
         )
         w_opt = sol["x"].full().flatten()
 
@@ -90,7 +98,7 @@ class OptiSolver:
 
         return x_opt, u_opt
 
-    def build_nlp(self, T, N, x_inital, PV_pred, PL_pred):
+    def build_nlp(self, T, N, x_inital):
 
         # Start with an empty NLP
         w = []
@@ -103,7 +111,7 @@ class OptiSolver:
         ubg = []
 
         # "Lift" initial conditions
-        Xk = MX.sym("X0")
+        Xk = SX.sym("X0")
         w += [Xk]
         lbw += [x_inital]
         ubw += [x_inital]
@@ -112,14 +120,11 @@ class OptiSolver:
         # Formulate the NLP
         for k in range(N):
             # New NLP variable for the control
-            Uk = MX.sym("U_" + str(k), 4)
+            Uk = SX.sym("U_" + str(k), 4)
             w += [Uk]
             lbw += [0, 0, 0, 0]
             ubw += [self.Pb_max, self.Pb_max, self.Pg_max, self.Pg_max]
             w0 += [0, 0, 0, 0]
-
-            d0_k = PV_pred[k]
-            d1_k = PL_pred[k]
 
             # Integrate till the end of the interval
             self.build_integrator(T, N)
@@ -129,7 +134,7 @@ class OptiSolver:
             J = J + Fk["qf"]
 
             # New NLP variable for state at end of interval
-            Xk = MX.sym("X_" + str(k + 1))
+            Xk = SX.sym("X_" + str(k + 1))
             w += [Xk]
 
             lbw += [self.x_min]
@@ -139,7 +144,7 @@ class OptiSolver:
             # Add equality constraints
             g += [
                 Xk_end - Xk,
-                -Uk[0] + Uk[1] + Uk[2] - Uk[3] + d0_k - d1_k,
+                -Uk[0] + Uk[1] + Uk[2] - Uk[3] + self.parameters[k] - self.parameters[self.pred_horizon+k],
                 Uk[0] * Uk[1],
                 Uk[2] * Uk[3],
             ]
@@ -147,7 +152,7 @@ class OptiSolver:
             lbg += [0, 0, 0, 0]
             ubg += [0, 0, 0, 0]
 
-        prob = {"f": J, "x": vertcat(*w), "g": vertcat(*g)}
+        prob = {"f": J, "x": vertcat(*w), "g": vertcat(*g), 'p': self.parameters}
         if self.verbose:
             self.solver = nlpsol("solver", "ipopt", prob)
         else:

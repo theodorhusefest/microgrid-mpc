@@ -5,20 +5,20 @@ from pv_cellM import simulate_pv_cell
 from p_loadM import simulate_p_load
 
 
-DAYS = 1
+DAYS = 4
 sim_time = DAYS * 24  # Simulation time
 T = 1/6  # Sampling time
-N = 10  # Time horizon of the MPC
+N = 5  # Time horizon of the MPC
 
 pv_values = simulate_pv_cell(
     resulution=T * 60,
-    max_power=300,
+    max_power=80,
     days=DAYS,
     plot=True,
     add_noise=True)
 p_load = simulate_p_load(
     resulution=T * 60,
-    max_power=300,
+    max_power=60,
     days=DAYS,
     plot=True,
     add_noise=True)
@@ -37,7 +37,7 @@ ref_cost = 1000000000
 bat_max = 1000
 grid_max = 500
 
-# A simple model of a battery based system. Two states, the battery and the node between grid, battery and load/PV
+# A simple model of a battery based system.
 SOC = SX.sym('SOC')  # State of charge
 states = SOC
 n_states = states.shape[0]
@@ -102,7 +102,7 @@ for k in range(0, N):
 
 # Here we create the constraints.
 for k in range(0, N):
-    g = vertcat(g, U[0, k] - U[1, k] + U[2, k] + P[n_states*2 + k] - P[n_states*2 + k + 1])
+    g = vertcat(g, U[0, k] - U[1, k] + U[2, k] + P[n_states*2 + 2 * k] - P[n_states*2 + 2 * k + 1])
 
 # Reshapes the optimal controller U since the solver takes a vector as argument. U is our optimization variables.
 OPT_variables = vertcat(reshape(X, n_states * (N+1), 1), reshape(U, n_controls*N, 1))
@@ -169,7 +169,6 @@ mpciter = 0
 u_cl = []
 # Loops runs the MPC
 while mpciter < sim_time/T:
-    battery_cost = battery_cost * 1.3
     # x0 = x0 + np.random.randint(-10, 10)/1000
     p = vertcat(x0, xs)  # Parameter vector of initial state and the reference
     #For loop that adds the disturbance as a parameter. If the
