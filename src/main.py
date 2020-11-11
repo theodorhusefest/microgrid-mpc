@@ -21,17 +21,15 @@ def main():
     logpath = None
     log = input("Do you wish to log this run? ")
 
-    if log == "y" or log == "yes" or log == "Yes":
+    if log in ["y", "yes", "Yes"]:
         foldername = input("Do you wish to name logfolder? (enter to skip)")
         logpath = create_logs_folder(conf["logpath"], foldername)
 
     openloop = input("Run openloop? ")
 
-    T = conf["prediction_horizon"]
     actions_per_hour = conf["actions_per_hour"]
     horizon = conf["simulation_horizon"]
     simulation_horizon = horizon * actions_per_hour
-    prediction_horizon = conf["prediction_horizon"] * actions_per_hour
 
     start_time = time.time()
     step_time = start_time
@@ -53,6 +51,9 @@ def main():
     print("Predicted energy surplus/deficit:", np.sum(PV_pred) - np.sum(PL_pred))
     print("Actual energy surplus/deficit:", np.sum(PV) - np.sum(PL))
 
+    T = conf["prediction_horizon"]
+    N = conf["prediction_horizon"] * actions_per_hour
+
     xk = conf["x_inital"]
     xk_sim = conf["x_inital"]
     x_opt = np.asarray([xk])
@@ -64,35 +65,38 @@ def main():
 
     solver = OptiSolver()
 
-    for step in range(simulation_horizon):
-        if step + prediction_horizon <= simulation_horizon:
-            N = prediction_horizon
-        else:
-            N = simulation_horizon - step
+    nlp_params = solver.build_nlp(
+        T,
+        N,
+    )
 
-        start = step
-        stop = np.min([step + prediction_horizon, simulation_horizon])
+    x = nlp_params[0]
+    lbx = nlp_params[1]
+    ubx = nlp_params[2]
+    lbg = nlp_params[3]
+    ubg = nlp_params[4]
 
-        nlp_params = solver.build_nlp(
-            T,
-            N,
-            xk,
-            PV_pred[start:stop:],
-            PL_pred[start:stop:],
-        )
-        xk_opt, Uk_opt = solver.solve_nlp(nlp_params)
+    for step in range(simulation_horizon - N):
+        # Update NLP parameters
+        x[0] = xk
+        lbx[0] = xk
+        ubx[0] = xk
+        for i in range(N):
+            lbg[1 + 4 * i] = PL_pred[step + i] - PV_pred[step + i]
+            ubg[1 + 4 * i] = PL_pred[step + i] - PV_pred[step + i]
+
+        xk_opt, Uk_opt = solver.solve_nlp([x, lbx, ubx, lbg, ubg])
         x_opt = np.append(x_opt, xk_opt[1])
 
         xk_sim, Uk_sim = simulate_SOC(
             xk_sim,
             Uk_opt,
-            PV[start:stop:],
-            PL[start:stop:],
-            PV_pred[start:stop:],
-            PL_pred[start:stop:],
+            PV[step : step + N :],
+            PL[step : step + N :],
+            PV_pred[step : step + N :],
+            PL_pred[step : step + N :],
             solver.F,
         )
-
         x_sim = np.append(x_sim, xk_sim)
 
         if openloop in ["y", "yes", "Yes"]:
@@ -126,11 +130,11 @@ def main():
     u_bat = np.asarray([-u0, u1])
     u_grid = np.asarray([u2, -u3])
 
-    p.plot_control_actions(u, horizon, actions_per_hour, logpath)
+    p.plot_control_actions(u, horizon - T, actions_per_hour, logpath)
 
     p.plot_control_actions(
         u_bat,
-        horizon,
+        horizon - T,
         actions_per_hour,
         logpath,
         title="Battery actions",
@@ -139,18 +143,21 @@ def main():
 
     p.plot_control_actions(
         u_grid,
-        horizon,
+        horizon - T,
         actions_per_hour,
         logpath,
         title="Grid actions",
         legends=["Grid Buy", "Grid Sell"],
     )
 
-    p.plot_SOC(x_opt, horizon, logpath)
+    p.plot_SOC(x_opt, horizon - T, logpath)
     # p.plot_SOC(x_sim, horizon, logpath, title="Simulated State of Charge")
 
     p.plot_data(
-        [x_opt, x_sim], logpath=logpath, legends=["SOC optimal", "SOC simulated"]
+        [x_opt, x_sim],
+        logpath=logpath,
+        legends=["SOC optimal", "SOC simulated"],
+        title="Simulated vs optimal SOC",
     )
 
     stop = time.time()

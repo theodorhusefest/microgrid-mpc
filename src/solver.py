@@ -90,7 +90,7 @@ class OptiSolver:
 
         return x_opt, u_opt
 
-    def build_nlp(self, T, N, x_inital, PV_pred, PL_pred):
+    def build_nlp(self, T, N):
 
         # Start with an empty NLP
         w = []
@@ -105,9 +105,9 @@ class OptiSolver:
         # "Lift" initial conditions
         Xk = MX.sym("X0")
         w += [Xk]
-        lbw += [x_inital]
-        ubw += [x_inital]
-        w0 += [x_inital]
+        lbw += [0]
+        ubw += [0]
+        w0 += [0]
 
         # Formulate the NLP
         for k in range(N):
@@ -117,9 +117,6 @@ class OptiSolver:
             lbw += [0, 0, 0, 0]
             ubw += [self.Pb_max, self.Pb_max, self.Pg_max, self.Pg_max]
             w0 += [0, 0, 0, 0]
-
-            d0_k = PV_pred[k]
-            d1_k = PL_pred[k]
 
             # Integrate till the end of the interval
             self.build_integrator(T, N)
@@ -139,7 +136,7 @@ class OptiSolver:
             # Add equality constraints
             g += [
                 Xk_end - Xk,
-                -Uk[0] + Uk[1] + Uk[2] - Uk[3] + d0_k - d1_k,
+                -Uk[0] + Uk[1] + Uk[2] - Uk[3],
                 Uk[0] * Uk[1],
                 Uk[2] * Uk[3],
             ]
