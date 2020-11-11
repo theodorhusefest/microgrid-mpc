@@ -1,5 +1,6 @@
 import time
-from casadi import *
+from casadi import vertcat
+import numpy as np
 import matplotlib.pyplot as plt
 import utils.plots as p
 from utils.helpers import create_logs_folder, parse_config, load_datafile, save_datafile
@@ -63,7 +64,7 @@ def main():
     u2 = np.asarray([])
     u3 = np.asarray([])
 
-    solver = OptiSolver()
+    solver = OptiSolver(N)
 
     nlp_params = solver.build_nlp(
         T,
@@ -81,11 +82,12 @@ def main():
         x[0] = xk
         lbx[0] = xk
         ubx[0] = xk
-        for i in range(N):
-            lbg[1 + 4 * i] = PL_pred[step + i] - PV_pred[step + i]
-            ubg[1 + 4 * i] = PL_pred[step + i] - PV_pred[step + i]
+        pv_ref = PV_pred[step : step + N]
+        pl_ref = PL_pred[step : step + N]
 
-        xk_opt, Uk_opt = solver.solve_nlp([x, lbx, ubx, lbg, ubg])
+        xk_opt, Uk_opt = solver.solve_nlp(
+            [x, lbx, ubx, lbg, ubg], vertcat(pv_ref, pl_ref)
+        )
         x_opt = np.append(x_opt, xk_opt[1])
 
         xk_sim, Uk_sim = simulate_SOC(
