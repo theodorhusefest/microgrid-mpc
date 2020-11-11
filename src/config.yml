@@ -3,8 +3,8 @@ prediction_horizon: 2   # hours
 actions_per_hour: 6
 x_inital: 0.7
 logpath: "./logs/"
-datafile: "./data/load_PV3.csv"
-perfect_predictions: True
+datafile: "./data/bounded.csv"
+perfect_predictions: False
 plot_predictions: True
 
 simulations:

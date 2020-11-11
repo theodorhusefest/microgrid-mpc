@@ -3,8 +3,9 @@ from utils.helpers import parse_config
 
 
 class OptiSolver:
-    def __init__(self):
+    def __init__(self, N):
 
+        self.N = N
         conf = parse_config()
         conf_system = conf["system"]
 
@@ -33,6 +34,9 @@ class OptiSolver:
         self.u3 = MX.sym("u3")
 
         self.u = vertcat(self.u0, self.u1, self.u2, self.u3)
+
+        self.pv = MX.sym("pv", self.N)
+        self.pl = MX.sym("pv", self.N)
 
         # Initialize system properties
         self.xdot = self.build_ode()
@@ -78,10 +82,15 @@ class OptiSolver:
             Q = Q + DT / 6 * (k1_q + 2 * k2_q + 2 * k3_q + k4_q)
         self.F = Function("F", [X0, U], [X, Q], ["x0", "p"], ["xf", "qf"])
 
-    def solve_nlp(self, params):
+    def solve_nlp(self, params, p_ref):
         # Solve the NLP
         sol = self.solver(
-            x0=params[0], lbx=params[1], ubx=params[2], lbg=params[3], ubg=params[4]
+            x0=params[0],
+            lbx=params[1],
+            ubx=params[2],
+            lbg=params[3],
+            ubg=params[4],
+            p=p_ref,
         )
         w_opt = sol["x"].full().flatten()
 
@@ -109,6 +118,8 @@ class OptiSolver:
         ubw += [0]
         w0 += [0]
 
+        self.build_integrator(T, N)
+
         # Formulate the NLP
         for k in range(N):
             # New NLP variable for the control
@@ -117,9 +128,6 @@ class OptiSolver:
             lbw += [0, 0, 0, 0]
             ubw += [self.Pb_max, self.Pb_max, self.Pg_max, self.Pg_max]
             w0 += [0, 0, 0, 0]
-
-            # Integrate till the end of the interval
-            self.build_integrator(T, N)
 
             Fk = self.F(x0=Xk, p=Uk)
             Xk_end = Fk["xf"]
@@ -136,7 +144,7 @@ class OptiSolver:
             # Add equality constraints
             g += [
                 Xk_end - Xk,
-                -Uk[0] + Uk[1] + Uk[2] - Uk[3],
+                -Uk[0] + Uk[1] + Uk[2] - Uk[3] + self.pv[k] - self.pl[k],
                 Uk[0] * Uk[1],
                 Uk[2] * Uk[3],
             ]
@@ -144,7 +152,12 @@ class OptiSolver:
             lbg += [0, 0, 0, 0]
             ubg += [0, 0, 0, 0]
 
-        prob = {"f": J, "x": vertcat(*w), "g": vertcat(*g)}
+        prob = {
+            "f": J,
+            "x": vertcat(*w),
+            "g": vertcat(*g),
+            "p": vertcat(self.pv, self.pl),
+        }
         if self.verbose:
             self.solver = nlpsol("solver", "ipopt", prob)
         else:
