@@ -27,16 +27,16 @@ class OptiSolver:
         self.grid_sell = conf["simulations"]["grid_sell"]
 
         # Define symbolic variables
-        self.x = MX.sym("x")
-        self.u0 = MX.sym("u0")
-        self.u1 = MX.sym("u1")
-        self.u2 = MX.sym("u2")
-        self.u3 = MX.sym("u3")
+        self.x = SX.sym("x")
+        self.u0 = SX.sym("u0")
+        self.u1 = SX.sym("u1")
+        self.u2 = SX.sym("u2")
+        self.u3 = SX.sym("u3")
 
         self.u = vertcat(self.u0, self.u1, self.u2, self.u3)
 
-        self.pv = MX.sym("pv", self.N)
-        self.pl = MX.sym("pv", self.N)
+        self.pv = SX.sym("pv", self.N)
+        self.pl = SX.sym("pv", self.N)
 
         # Initialize system properties
         self.xdot = self.build_ode()
@@ -69,8 +69,8 @@ class OptiSolver:
         M = 4  # RK4 steps per interval
         DT = T / N / M
         f = Function("f", [self.x, self.u], [self.xdot, self.L])
-        X0 = MX.sym("X0")
-        U = MX.sym("U", 4)
+        X0 = SX.sym("X0")
+        U = SX.sym("U", 4)
         X = X0
         Q = 0
         for _ in range(M):
@@ -112,7 +112,7 @@ class OptiSolver:
         ubg = []
 
         # "Lift" initial conditions
-        Xk = MX.sym("X0")
+        Xk = SX.sym("X0")
         w += [Xk]
         lbw += [0]
         ubw += [0]
@@ -123,7 +123,7 @@ class OptiSolver:
         # Formulate the NLP
         for k in range(N):
             # New NLP variable for the control
-            Uk = MX.sym("U_" + str(k), 4)
+            Uk = SX.sym("U_" + str(k), 4)
             w += [Uk]
             lbw += [0, 0, 0, 0]
             ubw += [self.Pb_max, self.Pb_max, self.Pg_max, self.Pg_max]
@@ -134,7 +134,7 @@ class OptiSolver:
             J = J + Fk["qf"]
 
             # New NLP variable for state at end of interval
-            Xk = MX.sym("X_" + str(k + 1))
+            Xk = SX.sym("X_" + str(k + 1))
             w += [Xk]
 
             lbw += [self.x_min]

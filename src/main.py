@@ -1,5 +1,6 @@
 import time
-from casadi import *
+from casadi import vertcat
+import numpy as np
 import matplotlib.pyplot as plt
 import utils.plots as p
 from utils.helpers import create_logs_folder, parse_config, load_datafile, save_datafile
