@@ -29,7 +29,7 @@ def plot_SOC(
 
 def plot_control_actions(
     control,
-    timehorizon,
+    horizon,
     actions_per_hour,
     logpath=None,
     title="All controls",
@@ -39,7 +39,8 @@ def plot_control_actions(
 ):
     plt.figure()
     plt.clf()
-    t = np.asarray(range(timehorizon * MINUTES_PER_HOUR))
+    timehorizon = control[0].shape[0] * int(MINUTES_PER_HOUR / actions_per_hour)
+    t = np.asarray(range(timehorizon))
     for u in control:
         u = np.asarray(u).flatten()
         u_plot = np.repeat(u, int(MINUTES_PER_HOUR / actions_per_hour))
@@ -47,8 +48,8 @@ def plot_control_actions(
 
     plt.xlabel(xlabel)
     plt.xticks(
-        np.linspace(0, (timehorizon * MINUTES_PER_HOUR), timehorizon),
-        range(timehorizon),
+        np.linspace(0, timehorizon, horizon),
+        range(horizon),
     )
     plt.ylabel(ylabel)
     plt.title(title)
@@ -62,7 +63,7 @@ def plot_data(series, logpath=None, title="", legends=[]):
     Plots the given series
     """
     plt.figure()
-    t = np.linspace(0, 24, series[0].shape[0])
+    t = np.linspace(0, int(series[0].shape[0] / 6), series[0].shape[0])
     for serie in series:
         plt.plot(t, serie)
     plt.title(title)
