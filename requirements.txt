@@ -4,3 +4,5 @@ pandas
 matplotlib
 xlrd
 scipy
+seaborn
+solcast
