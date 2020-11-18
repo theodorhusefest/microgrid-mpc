@@ -38,11 +38,9 @@ These are the variables that can be configured in the config-file. Going outside
 | system.nb_d 	| Battery discharge coefficient 	| 0.8 	| [0, 1] 	|
 | system.x_min 	| Hard constraint on minimum SOC 	| 0.3 	| [0, 1] 	|
 | system.x_max 	| Hard constraint on maximum SOC 	| 0.9 	| [0, 1] 	|
-| system.x_ref 	| Reference SOC 	| 0.7 	| [x_min, x_max] 	|
 | system.Pb_max 	| Hard constraint on Maximum power which can charge/discharge battery 	| 1000 	| [0, -) 	|
 | system.Pg_max 	| Hard constraint on maximum power to be drawn/sold to grid 	| 500 	| [0, -) 	|
 | system.battery_cost 	| Cost of using battery 	| 0.1 	| [0, -) 	|
-| system.ref_cost 	| Cost of staying away from x_ref 	| 1 	| [0, -) 	|
 | system.grid_cost 	| General cost of using the grid 	| 100 	| [0, -) 	|
 | system.verbose 	| Flag for printing output from the NLP-solver 	| False 	| True, False 	|
 

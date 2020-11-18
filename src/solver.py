@@ -15,12 +15,10 @@ class OptiSolver:
         self.nb_d = conf_system["nb_d"]
         self.x_min = conf_system["x_min"]
         self.x_max = conf_system["x_max"]
-        self.x_ref = conf_system["x_ref"]
         self.Pb_max = conf_system["Pb_max"]
         self.Pg_max = conf_system["Pg_max"]
         self.battery_cost = conf_system["battery_cost"]
         self.grid_cost = conf_system["grid_cost"]
-        self.ref_cost = conf_system["ref_cost"]
         self.verbose = conf_system["verbose"]
 
         self.grid_buy = conf["simulations"]["grid_buy"]
@@ -58,7 +56,6 @@ class OptiSolver:
             + 10 * self.grid_buy * self.u2
             - 10 * self.grid_sell * self.u3
             + self.grid_cost * (self.u2 + self.u3) ** 2
-            + self.ref_cost * ((self.x_ref - self.x) * 100) ** 2
         )
 
     def build_integrator(self, T, N):
