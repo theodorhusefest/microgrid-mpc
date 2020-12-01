@@ -90,11 +90,11 @@ class OptiSolver:
             p=p_ref,
         )
         w_opt = sol["x"].full().flatten()
+        J_opt = sol["f"].full().flatten()[0]
 
         x_opt = w_opt[0::5]
         u_opt = [w_opt[1::5], w_opt[2::5], w_opt[3::5], w_opt[4::5]]
-
-        return x_opt, u_opt
+        return x_opt, u_opt, J_opt
 
     def build_nlp(self, T, N):
 
