@@ -7,7 +7,7 @@ from utils.helpers import create_logs_folder, parse_config, load_datafile, save_
 from simulations.simulate import get_simulations
 from simulations.simulate_SOC import simulate_SOC
 from solver import OptiSolver
-from metrics import net_spending_grid, net_change_battery
+from metrics import net_spending_grid, net_change_battery, net_cost_battery
 
 
 def main():
@@ -78,7 +78,8 @@ def main():
     lbg = nlp_params[3]
     ubg = nlp_params[4]
 
-    net_spending = 0
+    net_cost_grid = 0
+    net_cost_bat = 0
     J = 0
 
     for step in range(simulation_horizon - N):
@@ -119,7 +120,11 @@ def main():
         u2 = np.append(u2, uk[2])
         u3 = np.append(u3, uk[3])
 
-        net_spending += net_spending_grid(Uk_sim, 1.5, actions_per_hour)
+        net_cost_grid += net_spending_grid(Uk_sim, 1.5, actions_per_hour)
+        net_cost_bat += net_cost_battery(
+            Uk_sim, conf["system"]["battery_cost"], actions_per_hour
+        )
+
         if step % 10 == 0:
             print(
                 "\nFinshed iteration step {}. Current step took {}s".format(
@@ -133,9 +138,12 @@ def main():
             )
             step_time = time.time()
 
-    print("Net spending grid: {}kr".format(np.around(net_spending, 2)))
+    print("Net spending grid: {}kr".format(np.around(net_cost_grid, 2)))
+    print("Net spending battery: {}kr".format(np.around(net_cost_bat, 2)))
     print("Net change battery: {}".format(np.around(net_change_battery(u0, u1), 2)))
     print("Total cost: {}".format(np.around(J, 2)))
+
+    print("Grid + battery spending:", np.around(net_cost_grid + net_cost_bat, 2))
 
     # Plotting
     u = np.asarray([-u0, u1, u2, -u3])

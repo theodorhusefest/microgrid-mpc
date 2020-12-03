@@ -18,3 +18,10 @@ def net_change_battery(u0, u1):
         change_d += np.abs(u1[i + 1] - u1[i])
 
     return change_c + change_d
+
+
+def net_cost_battery(U, battery_cost, actions_per_hour):
+    charge = U[0] * battery_cost
+    discharge = U[1] * battery_cost
+
+    return (charge + discharge) / actions_per_hour

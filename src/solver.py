@@ -53,8 +53,8 @@ class OptiSolver:
 
         return (
             self.battery_cost * (self.u0 + self.u1)
-            + 10 * self.grid_buy * self.u2
-            - 10 * self.grid_sell * self.u3
+            + self.grid_buy * self.u2
+            - self.grid_sell * self.u3
             + self.grid_cost * (self.u2 + self.u3) ** 2
         )
 
