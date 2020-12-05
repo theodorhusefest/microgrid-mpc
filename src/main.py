@@ -109,16 +109,17 @@ def main():
 
         if openloop in ["y", "yes", "Yes"]:
             xk = xk_opt[1]  # xk is optimal
+            uk = [u[0] for u in Uk_opt]
+            u0 = np.append(u0, uk[0])
+            u1 = np.append(u1, uk[1])
+            u2 = np.append(u2, uk[2])
+            u3 = np.append(u3, uk[3])
         else:
             xk = xk_sim  # xk is simulated difference between measurements and predictions
-
-        # Get the next control actions
-        uk = [u[0] for u in Uk_opt]
-
-        u0 = np.append(u0, uk[0])
-        u1 = np.append(u1, uk[1])
-        u2 = np.append(u2, uk[2])
-        u3 = np.append(u3, uk[3])
+            u0 = np.append(u0, Uk_sim[0])
+            u1 = np.append(u1, Uk_sim[1])
+            u2 = np.append(u2, Uk_sim[2])
+            u3 = np.append(u3, Uk_sim[3])
 
         net_cost_grid += net_spending_grid(Uk_sim, 1.5, actions_per_hour)
         net_cost_bat += net_cost_battery(

@@ -13,9 +13,16 @@ def get_simulations(logpath):
     datafile = conf["datafile"]
 
     data = pd.read_csv(datafile)
-    PL = (data.P1 + data.P2).to_numpy()
+    if "P1" in data.columns:
+        PL = (data.P1 + data.P2).to_numpy()
+    else:
+        PL = data.PL.to_numpy()
     PV = data.PV.to_numpy()
-    grid_buy = grid_sell = data.Spot_pris.to_numpy()
+
+    if "Spot_pris" in data.columns:
+        grid_buy = grid_sell = data.Spot_pris.to_numpy()
+    else:
+        grid_buy = grid_sell = 1.5
 
     if conf["perfect_predictions"] or "PV_pred" not in data.columns:
         PV_pred = PV

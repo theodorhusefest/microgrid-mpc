@@ -1,10 +1,10 @@
-simulation_horizon: 24    # hours
-prediction_horizon: 2   # hours
+simulation_horizon: 60    # hours
+prediction_horizon: 3   # hours
 actions_per_hour: 6
-x_inital: 0.3
+x_inital: 0.8
 logpath: "./logs/"
-datafile: "./data/cloudy.csv"
-perfect_predictions: True
+datafile: "./data/load_PV3.csv"
+perfect_predictions: False
 plot_predictions: True
 
 simulations:
@@ -21,8 +21,10 @@ system:
     nb_d: 0.913724
     x_min: 0.3
     x_max: 0.9
+    x_ref: 0.7
     Pb_max: 1000
     Pg_max: 500
     battery_cost: 0.128
     grid_cost: 10
+    ref_cost: 1
     verbose: False
