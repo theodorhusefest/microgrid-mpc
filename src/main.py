@@ -8,6 +8,9 @@ from simulations.simulate import get_simulations
 from simulations.simulate_SOC import simulate_SOC
 from solver import OptiSolver
 from metrics import net_spending_grid, net_change_battery, net_cost_battery
+from arima import Arima
+
+from statsmodels.tools.eval_measures import rmse
 
 
 def main():
@@ -27,8 +30,9 @@ def main():
         foldername = input("Do you wish to name logfolder? (enter to skip)")
         logpath = create_logs_folder(conf["logpath"], foldername)
 
-    openloop = input("Run openloop? ")
+    openloop = False
 
+    use_arima = not conf["perfect_predictions"]
     actions_per_hour = conf["actions_per_hour"]
     horizon = conf["simulation_horizon"]
     simulation_horizon = horizon * actions_per_hour
@@ -82,13 +86,31 @@ def main():
     net_cost_bat = 0
     J = 0
 
+    if use_arima:
+        pv_model = Arima("PV")
+        pl_model = Arima("PL")
+
+        pv_preds = []
+        pl_preds = []
+
     for step in range(simulation_horizon - N):
         # Update NLP parameters
         x[0] = xk
         lbx[0] = xk
         ubx[0] = xk
-        pv_ref = PV_pred[step : step + N]
-        pl_ref = PL_pred[step : step + N]
+
+        if use_arima:
+            pv_model.update(PV[step])
+            pl_model.update(PL[step])
+
+            pv_ref = pv_model.predict(T)
+            pl_ref = pl_model.predict(T)
+
+            pv_preds.append(pv_ref[0])
+            pl_preds.append(pl_ref[0])
+        else:
+            pv_ref = PV_pred[step : step + N]
+            pl_ref = PL_pred[step : step + N]
 
         xk_opt, Uk_opt, J_opt = solver.solve_nlp(
             [x, lbx, ubx, lbg, ubg], vertcat(pv_ref, pl_ref)
@@ -99,15 +121,13 @@ def main():
         xk_sim, Uk_sim = simulate_SOC(
             xk_sim,
             Uk_opt,
-            PV[step : step + N :],
-            PL[step : step + N :],
-            PV_pred[step : step + N :],
-            PL_pred[step : step + N :],
+            PV[step],
+            PL[step],
             solver.F,
         )
         x_sim = np.append(x_sim, xk_sim)
 
-        if openloop in ["y", "yes", "Yes"]:
+        if openloop:
             xk = xk_opt[1]  # xk is optimal
             uk = [u[0] for u in Uk_opt]
             u0 = np.append(u0, uk[0])
@@ -139,11 +159,13 @@ def main():
             )
             step_time = time.time()
 
+        check_constrain_satisfaction(u0[-1], u1[-1], u2[-1], u3[-1], PV[step], PL[step])
+
     print("Net spending grid: {}kr".format(np.around(net_cost_grid, 2)))
+    print("Peak power consumption {}".format(np.around(np.max(u2), 2)))
     print("Net spending battery: {}kr".format(np.around(net_cost_bat, 2)))
     print("Net change battery: {}".format(np.around(net_change_battery(u0, u1), 2)))
     print("Total cost: {}".format(np.around(J, 2)))
-
     print("Grid + battery spending:", np.around(net_cost_grid + net_cost_bat, 2))
 
     # Plotting
@@ -199,9 +221,35 @@ def main():
         ],
         logpath=logpath,
     )
+    if use_arima:
+        p.plot_data(
+            [PV[: len(pv_preds)], pv_preds], legends=["Real PV", "Predicted PV"]
+        )
+        p.plot_data(
+            [PL[: len(pl_preds)], pl_preds], legends=["Real Pl", "Predicted PL"]
+        )
+        print()
+        print("RMSE of PV-prediction", rmse(PV[: len(pv_preds)], pv_preds))
+        print("RMSE of L-prediction", rmse(PL[: len(pl_preds)], pl_preds))
+
     plt.show(block=True)
     plt.ion()
     plt.close("all")
+
+
+def check_constrain_satisfaction(u0, u1, u2, u3, pv, l):
+    residual = -u0 + u1 + u2 - u3 + pv - l
+
+    if residual > 1:
+        print("Constraint breached")
+        print("residual", residual)
+        print("u0", u0)
+        print("u1", u1)
+        print("u2", u2)
+        print("u3", u3)
+        print("pv", pv)
+        print("l", l)
+        print()
 
 
 if __name__ == "__main__":
