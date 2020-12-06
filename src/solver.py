@@ -63,7 +63,7 @@ class OptiSolver:
 
     def build_integrator(self, T, N):
         """
-        Creates the given integrator for the current system.
+        Creates the integrator for the current system.
         """
 
         M = 4  # RK4 steps per interval

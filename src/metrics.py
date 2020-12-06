@@ -1,4 +1,5 @@
 import numpy as np
+from statsmodels.tools.eval_measures import rmse
 
 
 def net_spending_grid(U, spot_price, actions_per_hour):
@@ -17,7 +18,7 @@ def net_change_battery(u0, u1):
         change_c += np.abs(u0[i + 1] - u0[i])
         change_d += np.abs(u1[i + 1] - u1[i])
 
-    return change_c + change_d
+    return (change_c + change_d) / u0.shape[0]
 
 
 def net_cost_battery(U, battery_cost, actions_per_hour):
@@ -25,3 +26,7 @@ def net_cost_battery(U, battery_cost, actions_per_hour):
     discharge = U[1] * battery_cost
 
     return (charge + discharge) / actions_per_hour
+
+
+def rmse_predictions(real, pred):
+    print("RMSE of PV-prediction", rmse(real[: len(pred)], pred))

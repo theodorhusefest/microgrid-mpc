@@ -5,7 +5,9 @@ from utils.helpers import parse_config
 
 
 def simulate_SOC(x, u_opt, PV, PL, F):
-    uk_sim = get_real_u(x, u_opt, PV, PL)
+    pv = PV.copy()
+    l = PL.copy()
+    uk_sim = get_real_u(x, u_opt, pv, l)
     Fk = F(x0=x, p=uk_sim)
 
     xk_sim = Fk["xf"].full().flatten()[0]

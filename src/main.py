@@ -1,34 +1,28 @@
 import time
-from casadi import vertcat
 import numpy as np
+from casadi import vertcat
 import matplotlib.pyplot as plt
 import utils.plots as p
-from utils.helpers import create_logs_folder, parse_config, load_datafile, save_datafile
-from simulations.simulate import get_simulations
-from simulations.simulate_SOC import simulate_SOC
-from solver import OptiSolver
-from metrics import net_spending_grid, net_change_battery, net_cost_battery
-from arima import Arima
 
-from statsmodels.tools.eval_measures import rmse
+from arima import Arima
+from solver import OptiSolver
+import metrics as metrics
+import utils.helpers as utils
+from simulations.simulate_SOC import simulate_SOC
 
 
 def main():
     """
     Main function for mpc-scheme with receding horizion.
-
-    Assumptions:
-    - Only get weather predicitons at start of interval
-
     """
-    conf = parse_config()
+    conf = utils.parse_config()
 
     logpath = None
     log = input("Do you wish to log this run? ")
 
     if log in ["y", "yes", "Yes"]:
         foldername = input("Do you wish to name logfolder? (enter to skip)")
-        logpath = create_logs_folder(conf["logpath"], foldername)
+        logpath = utils.create_logs_folder(conf["logpath"], foldername)
 
     openloop = False
 
@@ -40,22 +34,7 @@ def main():
     start_time = time.time()
     step_time = start_time
 
-    # Get predictions for given time period
-    PV, PV_pred, PL, PL_pred, grid_buy, grid_sell = get_simulations(logpath)
-
-    print(
-        "Predicted energy produced {}, predicted energy consumed {}".format(
-            np.sum(PV_pred), np.sum(PL_pred)
-        )
-    )
-
-    print(
-        "Actual energy produced {}, actual energy consumed {}".format(
-            np.sum(PV), np.sum(PL)
-        )
-    )
-    print("Predicted energy surplus/deficit:", np.sum(PV_pred) - np.sum(PL_pred))
-    print("Actual energy surplus/deficit:", np.sum(PV) - np.sum(PL))
+    PV, PV_pred, PL, PL_pred, grid_buy, grid_sell = utils.load_data()
 
     T = conf["prediction_horizon"]
     N = conf["prediction_horizon"] * actions_per_hour
@@ -86,12 +65,14 @@ def main():
     net_cost_bat = 0
     J = 0
 
+    pv_preds = [PV[0]]
+    pl_preds = [PL[0]]
+
+    plt.figure()
+
     if use_arima:
         pv_model = Arima("PV")
         pl_model = Arima("PL")
-
-        pv_preds = []
-        pl_preds = []
 
     for step in range(simulation_horizon - N):
         # Update NLP parameters
@@ -99,18 +80,25 @@ def main():
         lbx[0] = xk
         ubx[0] = xk
 
-        if use_arima:
+        if True:  # Predicted values equal to current
+            pv_ref = np.ones(N) * PV[step]
+            pl_ref = np.ones(N) * PL[step]
+
+        elif use_arima:  # Estimate using ARIMA
             pv_model.update(PV[step])
             pl_model.update(PL[step])
 
             pv_ref = pv_model.predict(T)
             pl_ref = pl_model.predict(T)
+        else:  # Use true predictions
+            pv_ref = PV[step + 1 : step + N + 1]
+            pl_ref = PL[step + 1 : step + N + 1]
 
-            pv_preds.append(pv_ref[0])
-            pl_preds.append(pl_ref[0])
-        else:
-            pv_ref = PV_pred[step : step + N]
-            pl_ref = PL_pred[step : step + N]
+        pv_preds.append(pv_ref[0])
+        pl_preds.append(pl_ref[0])
+
+        plt.plot(range(step, step + N), pv_ref, c="b")
+        plt.plot(range(step, step + N), PV[step : step + N], c="r")
 
         xk_opt, Uk_opt, J_opt = solver.solve_nlp(
             [x, lbx, ubx, lbg, ubg], vertcat(pv_ref, pl_ref)
@@ -121,8 +109,8 @@ def main():
         xk_sim, Uk_sim = simulate_SOC(
             xk_sim,
             Uk_opt,
-            PV[step],
-            PL[step],
+            PV[step + 1],
+            PL[step + 1],
             solver.F,
         )
         x_sim = np.append(x_sim, xk_sim)
@@ -141,8 +129,8 @@ def main():
             u2 = np.append(u2, Uk_sim[2])
             u3 = np.append(u3, Uk_sim[3])
 
-        net_cost_grid += net_spending_grid(Uk_sim, 1.5, actions_per_hour)
-        net_cost_bat += net_cost_battery(
+        net_cost_grid += metrics.net_spending_grid(Uk_sim, 1.5, actions_per_hour)
+        net_cost_bat += metrics.net_cost_battery(
             Uk_sim, conf["system"]["battery_cost"], actions_per_hour
         )
 
@@ -159,14 +147,29 @@ def main():
             )
             step_time = time.time()
 
-        check_constrain_satisfaction(u0[-1], u1[-1], u2[-1], u3[-1], PV[step], PL[step])
+        utils.check_constrain_satisfaction(
+            u0[-1], u1[-1], u2[-1], u3[-1], PV[step + 1], PL[step + 1]
+        )
 
-    print("Net spending grid: {}kr".format(np.around(net_cost_grid, 2)))
-    print("Peak power consumption {}".format(np.around(np.max(u2), 2)))
-    print("Net spending battery: {}kr".format(np.around(net_cost_bat, 2)))
-    print("Net change battery: {}".format(np.around(net_change_battery(u0, u1), 2)))
-    print("Total cost: {}".format(np.around(J, 2)))
-    print("Grid + battery spending:", np.around(net_cost_grid + net_cost_bat, 2))
+    plt.show()
+    mean_change_bat = metrics.net_change_battery(u0, u1)
+    print()
+    print("Net spending grid: {} kr".format(np.around(net_cost_grid, 2)))
+    print("Peak power consumption: {} kW".format(np.around(np.max(u2), 2)))
+    print("Net spending battery: {} kr".format(np.around(net_cost_bat, 2)))
+    print("Average switching battery: {}".format(np.around(mean_change_bat, 2)))
+    print(
+        "Grid + battery spending:",
+        np.around(net_cost_grid + net_cost_bat, 2),
+    )
+
+    E_start = conf["x_inital"] * conf["system"]["C_MAX"]
+    E_end = xk * conf["system"]["C_MAX"]
+
+    print(
+        "Change in battery energy {} kr".format(np.around(1.5 * (E_end - E_start), 2))
+    )
+    print("Total spending:", net_cost_grid + net_cost_bat + 1.5 * (E_end - E_start))
 
     # Plotting
     u = np.asarray([-u0, u1, u2, -u3])
@@ -203,9 +206,16 @@ def main():
         title="Simulated vs optimal SOC",
     )
 
+    p.plot_data(
+        [PV, PL],
+        logpath=logpath,
+        legends=["PV-production", "Load Demands"],
+        title="PV Production & Load Demands - Reference",
+    )
+
     stop = time.time()
     print("\nFinished optimation in {}s".format(np.around(stop - start_time, 2)))
-    save_datafile(
+    utils.save_datafile(
         [x_opt, x_sim, u0, u1, u2, u3, PV, PV_pred, PL, PL_pred],
         names=[
             "x_opt",
@@ -221,35 +231,19 @@ def main():
         ],
         logpath=logpath,
     )
-    if use_arima:
+    if conf["plot_predictions"]:
         p.plot_data(
             [PV[: len(pv_preds)], pv_preds], legends=["Real PV", "Predicted PV"]
         )
         p.plot_data(
             [PL[: len(pl_preds)], pl_preds], legends=["Real Pl", "Predicted PL"]
         )
-        print()
-        print("RMSE of PV-prediction", rmse(PV[: len(pv_preds)], pv_preds))
-        print("RMSE of L-prediction", rmse(PL[: len(pl_preds)], pl_preds))
+        metrics.rmse_predictions(PV, pv_preds)
+        metrics.rmse_predictions(PL, pl_preds)
 
     plt.show(block=True)
     plt.ion()
     plt.close("all")
-
-
-def check_constrain_satisfaction(u0, u1, u2, u3, pv, l):
-    residual = -u0 + u1 + u2 - u3 + pv - l
-
-    if residual > 1:
-        print("Constraint breached")
-        print("residual", residual)
-        print("u0", u0)
-        print("u1", u1)
-        print("u2", u2)
-        print("u3", u3)
-        print("pv", pv)
-        print("l", l)
-        print()
 
 
 if __name__ == "__main__":

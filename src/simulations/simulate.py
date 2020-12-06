@@ -1,10 +1,10 @@
 import pandas as pd
 import utils.plots as p
 from simulations.spot_price import simulate_spotprice
-from utils.helpers import parse_config, load_datafile
+from utils.helpers import parse_config
 
 
-def get_simulations(logpath):
+def get_data():
     """
     Returns all possible simulations
     """
@@ -25,25 +25,10 @@ def get_simulations(logpath):
         grid_buy = grid_sell = 1.5
 
     if conf["perfect_predictions"] or "PV_pred" not in data.columns:
-        PV_pred = PV
-        PL_pred = PL
+        PV_pred = PV.copy()
+        PL_pred = PL.copy()
     else:
         PV_pred = data.PV_pred.to_numpy()
         PL_pred = data.PL_pred.to_numpy()
-
-    if conf["plot_predictions"]:
-        p.plot_data(
-            [PV, PV_pred],
-            logpath=logpath,
-            title="Predicted vs real PV",
-            legends=["PV", "Predicted PV"],
-        )
-
-        p.plot_data(
-            [PL, PL_pred],
-            logpath=logpath,
-            title="Predicted vs real load",
-            legends=["PL", "Predicted PL"],
-        )
 
     return PV, PV_pred, PL, PL_pred, grid_buy, grid_sell

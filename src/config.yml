@@ -1,10 +1,10 @@
 simulation_horizon: 24   # hours
 prediction_horizon: 2   # hours
 actions_per_hour: 6
-x_inital: 0.8
+x_inital: 0.7
 logpath: "./logs/"
-datafile: "./sim-data/worst_case.csv"
-perfect_predictions: True
+datafile: "./data/load_PV3.csv"
+perfect_predictions: False
 plot_predictions: True
 
 simulations:
@@ -22,8 +22,8 @@ system:
     x_min: 0.3
     x_max: 0.9
     x_ref: 0.7
-    Pb_max: 1000
-    Pg_max: 500
+    Pb_max: 800
+    Pg_max: 1000
     battery_cost: 0.128
     grid_cost: 10
     ref_cost: 1

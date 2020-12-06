@@ -11,7 +11,11 @@ warnings.filterwarnings("ignore")
 
 
 class Arima:
-    def __init__(self, column, order=(1, 1, 1)):
+    def __init__(
+        self,
+        column,
+        order=(1, 0, 0),
+    ):
         self.df = (
             pd.read_csv("./data/arima-train.csv", parse_dates=["date"])
             .set_index("date")
@@ -22,7 +26,7 @@ class Arima:
         self.history = self.df[column].values
         self.start = self.df.index[0]
         self.end = self.df.index[-1]
-        self.model = ARIMA(self.df, order=(1, 0, 0))
+        self.model = ARIMA(self.df, order=self.order)
         self.model_fit = self.model.fit()
 
     def print_summary(self):
