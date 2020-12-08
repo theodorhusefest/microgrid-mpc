@@ -29,4 +29,9 @@ def net_cost_battery(U, battery_cost, actions_per_hour):
 
 
 def rmse_predictions(real, pred):
-    print("RMSE of PV-prediction", rmse(real[: len(pred)], pred))
+    return rmse(real[: len(pred)], pred)
+
+
+def mean_absolute_error(real, pred):
+    real, pred = np.asarray(real), np.asarray(pred)
+    return np.mean(np.abs((real - pred) / real)) * 100

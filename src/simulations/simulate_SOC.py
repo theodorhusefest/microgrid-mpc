@@ -16,40 +16,43 @@ def simulate_SOC(x, u_opt, PV, PL, F):
 
 def get_real_u(x, u_opt, pv, l):
     """
-    Calculates the real inputs when there are errors between
-    prediction and real PV and load values
+    Calculates the real inputs based on topology contraint
     """
 
     u = np.asarray([u_[0] for u_ in u_opt])
-    e_Pbat = -u[0] + u[1] + u[2] - u[3] + pv - l
+    e = -u[0] + u[1] + u[2] - u[3] + pv - l
 
-    if np.around(e_Pbat) == 0:
+    if is_zero(e):
         return u
 
-    if e_Pbat > 0:  # Suplus of energy
+    if e > 0:  # Suplus of energy
         # Can either charge or sell.
         if np.around(u[0]) != 0 and np.around(u[1]) == 0:
-            u[0] += e_Pbat
+            u[0] += e
         elif np.around(u[3]) != 0 and np.around(u[2]) == 0:
-            u[3] += e_Pbat
-        elif np.around(u[1]) != 0 and u[1] > e_Pbat:
-            u[1] -= e_Pbat  # Discharge less
-        elif u[2] > e_Pbat:
-            u[2] -= e_Pbat  # Buy less
+            u[3] += e
+        elif np.around(u[1]) != 0 and u[1] > e:
+            u[1] -= e  # Discharge less
+        elif u[2] > e:
+            u[2] -= e  # Buy less
         else:
             u[2] = 0  # Stop buying
-            u[3] += e_Pbat  # Start selling
+            u[3] += e  # Start selling
     else:  # Need more energy
         # Can discharge or buy
 
         if np.around(u[1]) != 0 and np.around(u[0]) == 0:
-            u[1] -= e_Pbat
+            u[1] -= e
         elif np.around(u[2]) != 0 and np.around(u[3]) == 0:
-            u[2] -= e_Pbat
-        elif np.around(u[0]) != 0 and u[0] > np.abs(e_Pbat):
-            u[0] += e_Pbat  # Charge less
+            u[2] -= e
+        elif np.around(u[0]) != 0 and u[0] > np.abs(e):
+            u[0] += e  # Charge less
         else:
             u[3] = 0  # Stop selling
-            u[2] -= e_Pbat  # Buy more
+            u[2] -= e  # Buy more"""
 
     return u
+
+
+def is_zero(x):
+    return np.around(x) == 0

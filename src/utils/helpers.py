@@ -58,7 +58,7 @@ def load_data():
     else:
         grid_buy = grid_sell = 1.5
 
-    if conf["perfect_predictions"] or "PV_pred" not in data.columns:
+    if "PV_pred" not in data.columns:
         PV_pred = PV.copy()
         PL_pred = PL.copy()
     else:

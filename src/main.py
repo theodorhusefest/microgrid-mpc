@@ -26,7 +26,9 @@ def main():
 
     openloop = False
 
-    use_arima = not conf["perfect_predictions"]
+    predictions = conf["predictions"]
+    print("Using {} predictions.".format(predictions))
+
     actions_per_hour = conf["actions_per_hour"]
     horizon = conf["simulation_horizon"]
     simulation_horizon = horizon * actions_per_hour
@@ -50,29 +52,26 @@ def main():
 
     solver = OptiSolver(N)
 
-    nlp_params = solver.build_nlp(
+    x, lbx, ubx, lbg, ubg = solver.build_nlp(
         T,
         N,
     )
-
-    x = nlp_params[0]
-    lbx = nlp_params[1]
-    ubx = nlp_params[2]
-    lbg = nlp_params[3]
-    ubg = nlp_params[4]
 
     net_cost_grid = 0
     net_cost_bat = 0
     J = 0
 
-    pv_preds = [PV[0]]
-    pl_preds = [PL[0]]
+    pv_preds = []
+    pl_preds = []
+
+    pv_error = []
+    pl_error = []
 
     plt.figure()
 
-    if use_arima:
-        pv_model = Arima("PV")
-        pl_model = Arima("PL")
+    if predictions == "arima":
+        pv_model = Arima("PV", order=(1, 0, 0))
+        pl_model = Arima("PL", order=(1, 0, 0))
 
     for step in range(simulation_horizon - N):
         # Update NLP parameters
@@ -80,25 +79,39 @@ def main():
         lbx[0] = xk
         ubx[0] = xk
 
-        if True:  # Predicted values equal to current
+        PV_true = PV[step : step + N]
+        PL_true = PL[step : step + N]
+
+        if predictions == "constant":  # Predicted values equal to measurement
             pv_ref = np.ones(N) * PV[step]
             pl_ref = np.ones(N) * PL[step]
 
-        elif use_arima:  # Estimate using ARIMA
+        elif predictions == "arima":  # Estimate using ARIMA
             pv_model.update(PV[step])
             pl_model.update(PL[step])
 
             pv_ref = pv_model.predict(T)
             pl_ref = pl_model.predict(T)
+
+        elif predictions == "data":
+            pv_ref = PV_pred[step : step + N]
+            pl_ref = PL_pred[step : step + N]
+
+        elif predictions == "scaled_mean":
+            pv_ref = (PV[step] / PV_pred[step]) * PV_pred[step : step + N]
+            pl_ref = (PL[step] / PL_pred[step]) * PL_pred[step : step + N]
         else:  # Use true predictions
-            pv_ref = PV[step + 1 : step + N + 1]
-            pl_ref = PL[step + 1 : step + N + 1]
+            pv_ref = PV_true
+            pl_ref = PL_true
 
         pv_preds.append(pv_ref[0])
         pl_preds.append(pl_ref[0])
 
+        pv_error.append(metrics.mean_absolute_error(PV_true, pv_ref))
+        pl_error.append(metrics.mean_absolute_error(PL_true, pl_ref))
+
         plt.plot(range(step, step + N), pv_ref, c="b")
-        plt.plot(range(step, step + N), PV[step : step + N], c="r")
+        plt.plot(range(step, step + N), PV_true, c="r")
 
         xk_opt, Uk_opt, J_opt = solver.solve_nlp(
             [x, lbx, ubx, lbg, ubg], vertcat(pv_ref, pl_ref)
@@ -109,29 +122,27 @@ def main():
         xk_sim, Uk_sim = simulate_SOC(
             xk_sim,
             Uk_opt,
-            PV[step + 1],
-            PL[step + 1],
+            PV[step],
+            PL[step],
             solver.F,
         )
+
         x_sim = np.append(x_sim, xk_sim)
 
         if openloop:
             xk = xk_opt[1]  # xk is optimal
-            uk = [u[0] for u in Uk_opt]
-            u0 = np.append(u0, uk[0])
-            u1 = np.append(u1, uk[1])
-            u2 = np.append(u2, uk[2])
-            u3 = np.append(u3, uk[3])
         else:
-            xk = xk_sim  # xk is simulated difference between measurements and predictions
-            u0 = np.append(u0, Uk_sim[0])
-            u1 = np.append(u1, Uk_sim[1])
-            u2 = np.append(u2, Uk_sim[2])
-            u3 = np.append(u3, Uk_sim[3])
+            xk = xk_sim
 
-        net_cost_grid += metrics.net_spending_grid(Uk_sim, 1.5, actions_per_hour)
+        uk = [u[0] for u in Uk_opt]
+        u0 = np.append(u0, uk[0])
+        u1 = np.append(u1, uk[1])
+        u2 = np.append(u2, uk[2])
+        u3 = np.append(u3, uk[3])
+
+        net_cost_grid += metrics.net_spending_grid(uk, 1.5, actions_per_hour)
         net_cost_bat += metrics.net_cost_battery(
-            Uk_sim, conf["system"]["battery_cost"], actions_per_hour
+            uk, conf["system"]["battery_cost"], actions_per_hour
         )
 
         if step % 10 == 0:
@@ -147,29 +158,27 @@ def main():
             )
             step_time = time.time()
 
-        utils.check_constrain_satisfaction(
-            u0[-1], u1[-1], u2[-1], u3[-1], PV[step + 1], PL[step + 1]
-        )
-
-    plt.show()
-    mean_change_bat = metrics.net_change_battery(u0, u1)
-    print()
-    print("Net spending grid: {} kr".format(np.around(net_cost_grid, 2)))
-    print("Peak power consumption: {} kW".format(np.around(np.max(u2), 2)))
-    print("Net spending battery: {} kr".format(np.around(net_cost_bat, 2)))
-    print("Average switching battery: {}".format(np.around(mean_change_bat, 2)))
-    print(
-        "Grid + battery spending:",
-        np.around(net_cost_grid + net_cost_bat, 2),
-    )
+    peak_power = np.around(np.max(u2), 2) * 70
 
     E_start = conf["x_inital"] * conf["system"]["C_MAX"]
     E_end = xk * conf["system"]["C_MAX"]
+    battery_change = np.around(grid_buy * (E_end - E_start), 2)
 
+    print()
+    print("Error PV prediction:", np.mean(pv_error))
+    print("Error PL prediction:", np.mean(pl_error))
+
+    print("Net spending grid: {} kr".format(np.around(net_cost_grid, 2)))
+    print("Peak power cost: {} kr".format(peak_power))
+    print("Net spending battery: {} kr".format(np.around(net_cost_bat, 2)))
     print(
-        "Change in battery energy {} kr".format(np.around(1.5 * (E_end - E_start), 2))
+        "Grid + battery spending: {} kr".format(
+            np.around(net_cost_grid + net_cost_bat, 2),
+        )
     )
-    print("Total spending:", net_cost_grid + net_cost_bat + 1.5 * (E_end - E_start))
+
+    print("Change in battery energy {} kr".format(battery_change))
+    print("Total spending:", net_cost_grid + net_cost_bat - battery_change + peak_power)
 
     # Plotting
     u = np.asarray([-u0, u1, u2, -u3])
@@ -183,7 +192,7 @@ def main():
         horizon - T,
         actions_per_hour,
         logpath,
-        title="Battery actions",
+        title="Battery Controls",
         legends=["Battery Charge", "Battery Discharge"],
     )
 
@@ -192,12 +201,11 @@ def main():
         horizon - T,
         actions_per_hour,
         logpath,
-        title="Grid actions",
+        title="Grid Controls",
         legends=["Grid Buy", "Grid Sell"],
     )
 
-    p.plot_SOC(x_opt, horizon - T, logpath)
-    # p.plot_SOC(x_sim, horizon, logpath, title="Simulated State of Charge")
+    p.plot_SOC(x_sim, horizon - T, logpath)
 
     p.plot_data(
         [x_opt, x_sim],
@@ -207,12 +215,13 @@ def main():
     )
 
     p.plot_data(
-        [PV, PL],
+        [PV[: simulation_horizon - N], PL[: simulation_horizon - N]],
         logpath=logpath,
-        legends=["PV-production", "Load Demands"],
-        title="PV Production & Load Demands - Reference",
+        legends=["PV Production", "Load Demands"],
+        title="PV Production & Load Demands",
     )
 
+    p.plot_SOC_control_subplots(x_sim, u, horizon - T, logpath=logpath)
     stop = time.time()
     print("\nFinished optimation in {}s".format(np.around(stop - start_time, 2)))
     utils.save_datafile(
@@ -232,15 +241,7 @@ def main():
         logpath=logpath,
     )
     if conf["plot_predictions"]:
-        p.plot_data(
-            [PV[: len(pv_preds)], pv_preds], legends=["Real PV", "Predicted PV"]
-        )
-        p.plot_data(
-            [PL[: len(pl_preds)], pl_preds], legends=["Real Pl", "Predicted PL"]
-        )
-        metrics.rmse_predictions(PV, pv_preds)
-        metrics.rmse_predictions(PL, pl_preds)
-
+        p.plot_predictions_subplots(PV, pv_preds, PL, pl_preds, logpath)
     plt.show(block=True)
     plt.ion()
     plt.close("all")
