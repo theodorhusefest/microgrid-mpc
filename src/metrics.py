@@ -33,5 +33,5 @@ def rmse_predictions(real, pred):
 
 
 def mean_absolute_error(real, pred):
-    real, pred = np.asarray(real), np.asarray(pred)
+    real, pred = np.asarray(real[: len(pred)]), np.asarray(pred)
     return np.mean(np.abs((real - pred) / real)) * 100

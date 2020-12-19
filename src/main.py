@@ -61,17 +61,17 @@ def main():
     net_cost_bat = 0
     J = 0
 
-    pv_preds = []
-    pl_preds = []
+    pv_preds = [PV[0]]
+    pl_preds = [PL[0]]
 
     pv_error = []
     pl_error = []
 
     plt.figure()
 
-    if predictions == "arima":
-        pv_model = Arima("PV", order=(1, 0, 0))
-        pl_model = Arima("PL", order=(1, 0, 0))
+    if predictions in ["arima", "best"]:
+        pv_model = Arima("PV", order=(3, 1, 2))
+        pl_model = Arima("PL", order=(1, 1, 4), seasonal_order=(0, 0, 0, 0))
 
     for step in range(simulation_horizon - N):
         # Update NLP parameters
@@ -100,15 +100,21 @@ def main():
         elif predictions == "scaled_mean":
             pv_ref = (PV[step] / PV_pred[step]) * PV_pred[step : step + N]
             pl_ref = (PL[step] / PL_pred[step]) * PL_pred[step : step + N]
+        elif predictions == "best":
+            pv_model.update(PV[step])
+
+            pv_ref = pv_model.predict(T)
+            pl_ref = (PL[step] / PL_pred[step]) * PL_pred[step : step + N]
+
         else:  # Use true predictions
             pv_ref = PV_true
             pl_ref = PL_true
 
-        pv_preds.append(pv_ref[0])
-        pl_preds.append(pl_ref[0])
+        pv_preds.append(pv_ref[1])
+        pl_preds.append(pl_ref[1])
 
-        pv_error.append(metrics.mean_absolute_error(PV_true, pv_ref))
-        pl_error.append(metrics.mean_absolute_error(PL_true, pl_ref))
+        pv_error.append(metrics.rmse(PV_true[0:4], pv_ref[0:4]))
+        pl_error.append(metrics.rmse(PL_true[0:4], pl_ref[0:4]))
 
         plt.plot(range(step, step + N), pv_ref, c="b")
         plt.plot(range(step, step + N), PV_true, c="r")
@@ -145,7 +151,7 @@ def main():
             uk, conf["system"]["battery_cost"], actions_per_hour
         )
 
-        if step % 10 == 0:
+        if step % 50 == 0:
             print(
                 "\nFinshed iteration step {}. Current step took {}s".format(
                     step, np.around(time.time() - step_time, 2)
@@ -176,7 +182,6 @@ def main():
             np.around(net_cost_grid + net_cost_bat, 2),
         )
     )
-
     print("Change in battery energy {} kr".format(battery_change))
     print("Total spending:", net_cost_grid + net_cost_bat - battery_change + peak_power)
 
@@ -240,6 +245,9 @@ def main():
         ],
         logpath=logpath,
     )
+
+    print("One-step PV RMSE:", metrics.rmse_predictions(PV, pv_preds))
+    print("One-step Load RMSE:", metrics.rmse_predictions(PL, pl_preds))
     if conf["plot_predictions"]:
         p.plot_predictions_subplots(PV, pv_preds, PL, pl_preds, logpath)
     plt.show(block=True)

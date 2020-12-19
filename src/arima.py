@@ -19,7 +19,7 @@ class Arima:
     def __init__(
         self,
         column,
-        order=(4, 1, 5),
+        order=(1, 1, 2),
         seasonal_order=(1, 1, 1, 144),
     ):
         self.df = (
@@ -37,24 +37,41 @@ class Arima:
         self.seasonal_order = seasonal_order
         self.column = column
         self.x = self.df[column].values
-        # self.clean_data()
+        self.clean_data()
         self.df[column] = self.x
         self.end = self.df.index[-1]
         self.model = ARIMA(
-            self.df[column].values,
+            self.df,
             order=self.order,
-            enforce_stationarity=True,
+            # seasonal_order=self.seasonal_order,
+            # enforce_stationarity=True,
             dates=self.df.index,
         )
 
         self.model_fit = self.model.fit()
 
+    def clean_data(self):
+        Nc = 50
+        self.x = np.convolve(self.x, np.ones(Nc) / Nc, mode="same")
+
+    def predict(self, hours):
+        pred = self.model_fit.predict(
+            self.end,
+            self.end + timedelta(hours=hours) - timedelta(minutes=10),
+        )
+        return np.clip(pred.values, 0, np.inf)
+
+    def update(self, observation):
+        self.end = self.end + timedelta(minutes=10)
+        new_datapoint = pd.DataFrame(
+            index=[0],
+            data={"date": self.end, self.column: observation},
+            columns=["date", self.column],
+        ).set_index("date")
+        self.model_fit = self.model_fit.append(new_datapoint, refit=True)
+
     def print_summary(self):
         print(self.model_fit.summary())
-
-    def clean_data(self):
-        Nc = 30
-        self.x = np.convolve(self.x, np.ones(Nc) / Nc, mode="same")
 
     def check_stationarity(self):
         result = adfuller(self.x)
@@ -72,22 +89,17 @@ class Arima:
         fig = sm.graphics.tsa.plot_pacf(self.x, lags=150, ax=ax2)
         plt.show()
 
-    def predict(self, hours):
-        # next_step = timedelta(minutes=10)
-        pred = self.model_fit.predict(start=self.x.shape[0], end=self.x.shape[0] + 11)
-        return np.clip(pred, 0, np.inf)
-
     def grid_search(self):
 
         best = np.inf
-        for p in range(0, 6):
-            for q in range(0, 6):
+        for p in range(1, 7):
+            for q in range(1, 7):
                 for P in range(1, 2):
                     for Q in range(1, 2):
                         model = ARIMA(
                             self.x,
                             order=(p, 1, q),
-                            enforce_stationarity=(P, 1, Q, 144),
+                            # seasonal_order=(P, 1, Q, 144),
                             dates=self.df.index,
                         )
                         model_fit = model.fit()
@@ -102,15 +114,6 @@ class Arima:
                             best_model = (p, q)
         print(best, best_model)
 
-    def update(self, observation):
-        self.end = self.end + timedelta(minutes=10)
-        new_datapoint = pd.DataFrame(
-            index=[0],
-            data={"date": self.end, self.column: observation},
-            columns=["date", self.column],
-        ).set_index("date")
-        self.model_fit = self.model_fit.append(new_datapoint, refit=True)
-
 
 if __name__ == "__main__":
     # auto_model = AutoArima("PV")
@@ -118,8 +121,7 @@ if __name__ == "__main__":
 
     arima = Arima("PL")
     arima.print_summary()
-    # arima.grid_search()
-    print(arima.df)
+    arima.grid_search()
     # arima.check_stationarity()
     # arima.plot_autocorrelation()
     # plt.plot(arima.df.index, arima.history)

@@ -110,7 +110,7 @@ def plot_predictions_subplots(PV, pv_preds, PL, pl_preds, logpath):
         ax=ax2,
     )
     if logpath:
-        fig.savefig("{}{}".format(logpath, "PV_PL_2_4" + ".eps"), format="eps")
+        fig.savefig("{}{}".format(logpath, "PV_PL_arima" + ".eps"), format="eps")
 
 
 def plot_SOC_control_subplots(x, u, horizon, logpath=None):
@@ -119,4 +119,4 @@ def plot_SOC_control_subplots(x, u, horizon, logpath=None):
     plot_control_actions(u, horizon, 6, ax=ax2)
 
     if logpath:
-        fig.savefig("{}{}".format(logpath, "SOC_U_2_4" + ".eps"), format="eps")
+        fig.savefig("{}{}".format(logpath, "SOC_U_arima" + ".eps"), format="eps")
