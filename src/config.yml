@@ -4,8 +4,8 @@ actions_per_hour: 6
 x_inital: 0.7
 logpath: "./logs/"
 datafile: "./sim-data/4days_mean.csv"
-predictions: perfect  #  perfect, data, constant, arima, scaled_mean, best
-plot_predictions: True
+predictions: arima  #  perfect, data, constant, arima, scaled_mean, best
+plot_predictions: False
 
 simulations:
     pv_power: 80
@@ -22,9 +22,9 @@ system:
     x_min: 0.3
     x_max: 0.9
     x_ref: 0.7
-    Pb_max: 0.0001
+    Pb_max: 1000
     Pg_max: 1000
     battery_cost: 0.128
     grid_cost: 10
-    ref_cost: 1
+    ref_cost: 10
     verbose: False

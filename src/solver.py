@@ -137,8 +137,12 @@ class OptiSolver:
             Xk = SX.sym("X_" + str(k + 1))
             w += [Xk]
 
-            lbw += [self.x_min]
-            ubw += [self.x_max]
+            if k == N - 1:
+                lbw += [self.x_ref]
+                ubw += [self.x_ref]
+            else:
+                lbw += [self.x_min]
+                ubw += [self.x_max]
             w0 += [0]
 
             # Add equality constraints
