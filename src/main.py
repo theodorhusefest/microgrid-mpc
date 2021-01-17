@@ -4,7 +4,7 @@ from casadi import vertcat
 import matplotlib.pyplot as plt
 import utils.plots as p
 
-from arima import Arima
+from simulations.arima import Arima
 from solver import OptiSolver
 import metrics as metrics
 import utils.helpers as utils
