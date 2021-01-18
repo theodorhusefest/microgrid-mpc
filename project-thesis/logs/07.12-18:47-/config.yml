@@ -1,0 +1,30 @@
+simulation_horizon: 3  # hours
+prediction_horizon: 2   # hours
+actions_per_hour: 6
+x_inital: 0.7
+logpath: "./logs/"
+datafile: "./sim-data/4days_mean.csv"
+predictions: data  #  perfect, data, constant, arima, scaled_mean
+plot_predictions: True
+
+simulations:
+    pv_power: 80
+    pv_noise: False
+    pl_power: 80
+    pl_noise: False
+    grid_buy: 1.5
+    grid_sell: 1.5
+
+system:
+    C_MAX: 1000
+    nb_c: 0.913724
+    nb_d: 0.913724
+    x_min: 0.3
+    x_max: 0.9
+    x_ref: 0.7
+    Pb_max: 800
+    Pg_max: 1000
+    battery_cost: 0.128
+    grid_cost: 10
+    ref_cost: 1
+    verbose: False
