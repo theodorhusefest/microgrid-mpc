@@ -48,27 +48,30 @@ def load_data():
 
     data = pd.read_csv(datafile)
     if "P1" in data.columns:
-        PL = (data.P1 + data.P2).to_numpy()
+        L1 = data.P1.to_numpy()
+        L2 = data.P2.to_numpy()
     else:
-        PL = data.PL.to_numpy()
+        L = data.PL.to_numpy()
     PV = data.PV.to_numpy()
 
     if "Spot_pris" in data.columns:
-        grid_buy = grid_sell = data.Spot_pris.to_numpy()
+        grid_buy = data.Spot_pris.to_numpy()
     else:
-        grid_buy = grid_sell = 1.5
+        grid_buy = 1.5
 
     if "PV_pred" not in data.columns:
         PV_pred = PV.copy()
-        PL_pred = PL.copy()
+        L1_pred = L1.copy()
+        L2_pred = L2.copy()
     else:
         PV_pred = data.PV_pred.to_numpy()
-        PL_pred = data.PL_pred.to_numpy()
+        L1_pred = data.L1_pred.to_numpy()
+        L2_pred = data.L2_pred.to_numpy()
 
-    return PV, PV_pred, PL, PL_pred, grid_buy, grid_sell
+    return [PV, PV_pred, L1, L1_pred, L2, L2_pred, grid_buy]
 
 
-def print_stats(PV, PL, PV_pred, PL_pred):
+def print_stats(PV, L, PV_pred, PL_pred):
     print(
         "Predicted energy produced {}, predicted energy consumed {}".format(
             np.sum(PV_pred), np.sum(PL_pred)
@@ -77,11 +80,11 @@ def print_stats(PV, PL, PV_pred, PL_pred):
 
     print(
         "Actual energy produced {}, actual energy consumed {}".format(
-            np.sum(PV), np.sum(PL)
+            np.sum(PV), np.sum(L)
         )
     )
     print("Predicted energy surplus/deficit:", np.sum(PV_pred) - np.sum(PL_pred))
-    print("Actual energy surplus/deficit:", np.sum(PV) - np.sum(PL))
+    print("Actual energy surplus/deficit:", np.sum(PV) - np.sum(L))
 
 
 def save_datafile(signals, names=[], logpath=None):

@@ -3,12 +3,11 @@ import numpy as np
 from casadi import vertcat
 import matplotlib.pyplot as plt
 import utils.plots as p
-
-
-from solver import OptiSolver
-import metrics as metrics
+import utils.metrics as metrics
 import utils.helpers as utils
-from simulations.simulate_SOC import simulate_SOC
+from ocp.linear import LinearOCP
+
+# from simulations.simulate_SOC import simulate_SOC
 
 
 def main():
@@ -24,7 +23,7 @@ def main():
         foldername = input("Do you wish to name logfolder? (enter to skip)")
         logpath = utils.create_logs_folder(conf["logpath"], foldername)
 
-    openloop = False
+    openloop = True
 
     predictions = conf["predictions"]
     print("Using {} predictions.".format(predictions))
@@ -36,91 +35,95 @@ def main():
     start_time = time.time()
     step_time = start_time
 
-    PV, PV_pred, PL, PL_pred, grid_buy, grid_sell = utils.load_data()
+    pv, pv_pred, l1, l1_pred, l2, l2_pred, grid_buy = utils.load_data()
 
     T = conf["prediction_horizon"]
     N = conf["prediction_horizon"] * actions_per_hour
 
-    xk = conf["x_inital"]
-    xk_sim = conf["x_inital"]
-    x_opt = np.asarray([xk])
-    x_sim = np.asarray([xk])
+    xk_0 = conf["x0_initial"]
+    xk_1 = conf["x1_initial"]
+    # xk_sim = conf["x_initial"]
+    x0_opt = np.asarray([xk_0])
+    x1_opt = np.asarray([xk_1])
     u0 = np.asarray([])
     u1 = np.asarray([])
     u2 = np.asarray([])
-    u3 = np.asarray([])
+    # u3 = np.asarray([])
 
-    solver = OptiSolver(N)
+    T0 = []
+    T1 = []
+    T2 = []
 
-    x, lbx, ubx, lbg, ubg = solver.build_nlp(
-        T,
-        N,
-    )
+    solver = LinearOCP(T, N)
+
+    x, lbx, ubx, lbg, ubg = solver.build_nlp()
 
     net_cost_grid = 0
     net_cost_bat = 0
     J = 0
 
-    pv_preds = [PV[0]]
-    pl_preds = [PL[0]]
+    # wt_pred = [30]
+    # pv_pred = [pv[0]]
+    # l1_pred = [l1[0]]
+    # l2_pred = [l2[0]]
 
     pv_error = []
-    pl_error = []
-
-    plt.figure()
+    l_error = []
 
     for step in range(simulation_horizon - N):
         # Update NLP parameters
-        x[0] = xk
-        lbx[0] = xk
-        ubx[0] = xk
+        x[0] = xk_0
+        lbx[0] = xk_0
+        ubx[0] = xk_0
+        x[1] = xk_1
+        lbx[1] = xk_1
+        ubx[1] = xk_1
 
-        PV_true = PV[step : step + N]
-        PL_true = PL[step : step + N]
+        pv_true = pv[step : step + N]
+        l1_true = l1[step : step + N]
+        l2_true = l2[step : step + N]
 
-        pv_ref = PV_true
-        pl_ref = PL_true
+        wt_ref = 30 * np.ones(N)
+        pv_ref = np.zeros(N)  # pv_true
+        l1_ref = l1_true
+        l2_ref = l2_true
 
-        pv_preds.append(pv_ref[1])
-        pl_preds.append(pl_ref[1])
+        # pv_pred.append(pv_ref[1])
+        # l_pred.append(l_ref[1])
 
-        pv_error.append(metrics.rmse(PV_true[0:4], pv_ref[0:4]))
-        pl_error.append(metrics.rmse(PL_true[0:4], pl_ref[0:4]))
-
-        plt.plot(range(step, step + N), pv_ref, c="b")
-        plt.plot(range(step, step + N), PV_true, c="r")
-
-        xk_opt, Uk_opt, J_opt = solver.solve_nlp(
-            [x, lbx, ubx, lbg, ubg], vertcat(pv_ref, pl_ref)
+        xk_opt, Uk_opt, Tk_opt, J_opt = solver.solve_nlp(
+            [x, lbx, ubx, lbg, ubg], vertcat(wt_ref, pv_ref, l1_ref, l2_ref)
         )
         J += J_opt
-        x_opt = np.append(x_opt, xk_opt[1])
 
+        T0.append(Tk_opt[0][0])
+        T1.append(Tk_opt[1][0])
+        T2.append(Tk_opt[2][0])
+        """
         xk_sim, Uk_sim = simulate_SOC(
             xk_sim,
             Uk_opt,
-            PV[step],
-            PL[step],
+            pv[step],
+            l[step],
             solver.F,
         )
 
         x_sim = np.append(x_sim, xk_sim)
+        """
 
         if openloop:
-            xk = xk_opt[1]  # xk is optimal
-        else:
-            xk = xk_sim
+            xk_0 = xk_opt[0][0]  # xk is optimal
+            xk_1 = xk_opt[1][0]
+        # else:
+        #    xk = xk_sim
+
+        x0_opt = np.append(x0_opt, xk_0)
+        x1_opt = np.append(x1_opt, xk_1)
 
         uk = [u[0] for u in Uk_opt]
         u0 = np.append(u0, uk[0])
         u1 = np.append(u1, uk[1])
         u2 = np.append(u2, uk[2])
-        u3 = np.append(u3, uk[3])
-
-        net_cost_grid += metrics.net_spending_grid(uk, 1.5, actions_per_hour)
-        net_cost_bat += metrics.net_cost_battery(
-            uk, conf["system"]["battery_cost"], actions_per_hour
-        )
 
         if step % 50 == 0:
             print(
@@ -129,98 +132,31 @@ def main():
                 )
             )
             print(
-                "xsim {}%, x_opt {}%".format(
-                    np.around(xk_sim, 2), np.around(xk_opt[1], 2)
+                "xsim {}%, x_opt {},{}%".format(
+                    np.around(0.5, 2),
+                    np.around(xk_opt[0][0], 2),
+                    np.around(xk_opt[1][0], 2),
                 )
             )
             step_time = time.time()
 
-    peak_power = np.around(np.max(u2), 2) * 70
-
-    E_start = conf["x_inital"] * conf["system"]["C_MAX"]
-    E_end = xk * conf["system"]["C_MAX"]
-    battery_change = np.around(grid_buy * (E_end - E_start), 2)
-
-    print()
-    print("Error PV prediction:", np.mean(pv_error))
-    print("Error PL prediction:", np.mean(pl_error))
-
-    print("Net spending grid: {} kr".format(np.around(net_cost_grid, 2)))
-    print("Peak power cost: {} kr".format(peak_power))
-    print("Net spending battery: {} kr".format(np.around(net_cost_bat, 2)))
-    print(
-        "Grid + battery spending: {} kr".format(
-            np.around(net_cost_grid + net_cost_bat, 2),
-        )
-    )
-    print("Change in battery energy {} kr".format(battery_change))
-    print("Total spending:", net_cost_grid + net_cost_bat - battery_change + peak_power)
-
     # Plotting
-    u = np.asarray([-u0, u1, u2, -u3])
-    u_bat = np.asarray([-u0, u1])
-    u_grid = np.asarray([u2, -u3])
-
-    p.plot_control_actions(u, horizon - T, actions_per_hour, logpath)
+    u = np.asarray([u0, u1, u2])
 
     p.plot_control_actions(
-        u_bat,
-        horizon - T,
-        actions_per_hour,
-        logpath,
-        title="Battery Controls",
-        legends=["Battery Charge", "Battery Discharge"],
+        u, horizon - T, actions_per_hour, logpath, legends=["Pb1", "Pb2", "Pg"]
     )
 
-    p.plot_control_actions(
-        u_grid,
-        horizon - T,
-        actions_per_hour,
-        logpath,
-        title="Grid Controls",
-        legends=["Grid Buy", "Grid Sell"],
-    )
-
-    p.plot_SOC(x_sim, horizon - T, logpath)
+    p.plot_SOC(x0_opt, horizon - T, logpath)
+    p.plot_SOC(x1_opt, horizon - T, logpath)
 
     p.plot_data(
-        [x_opt, x_sim],
-        logpath=logpath,
-        legends=["SOC optimal", "SOC simulated"],
-        title="Simulated vs optimal SOC",
+        np.asarray([T0, T1, T2]), title="Topology Variables", legends=["T", "B", "L"]
     )
 
-    p.plot_data(
-        [PV[: simulation_horizon - N], PL[: simulation_horizon - N]],
-        logpath=logpath,
-        legends=["PV Production", "Load Demands"],
-        title="PV Production & Load Demands",
-    )
-
-    p.plot_SOC_control_subplots(x_sim, u, horizon - T, logpath=logpath)
     stop = time.time()
     print("\nFinished optimation in {}s".format(np.around(stop - start_time, 2)))
-    utils.save_datafile(
-        [x_opt, x_sim, u0, u1, u2, u3, PV, PV_pred, PL, PL_pred],
-        names=[
-            "x_opt",
-            "x_sim",
-            "u0",
-            "u1",
-            "u2",
-            "u3",
-            "PV",
-            "PV_pred",
-            "PL",
-            "PL_pred",
-        ],
-        logpath=logpath,
-    )
 
-    print("One-step PV RMSE:", metrics.rmse_predictions(PV, pv_preds))
-    print("One-step Load RMSE:", metrics.rmse_predictions(PL, pl_preds))
-    if conf["plot_predictions"]:
-        p.plot_predictions_subplots(PV, pv_preds, PL, pl_preds, logpath)
     plt.show(block=True)
     plt.ion()
     plt.close("all")
