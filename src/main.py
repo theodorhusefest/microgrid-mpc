@@ -5,7 +5,9 @@ import matplotlib.pyplot as plt
 import utils.plots as p
 import utils.metrics as metrics
 import utils.helpers as utils
+
 from ocp.linear import LinearOCP
+from res.windturbine import WindTurbine
 
 # from simulations.simulate_SOC import simulate_SOC
 
@@ -37,6 +39,8 @@ def main():
 
     pv, pv_pred, l1, l1_pred, l2, l2_pred, grid_buy = utils.load_data()
 
+    wt = WindTurbine()
+
     T = conf["prediction_horizon"]
     N = conf["prediction_horizon"] * actions_per_hour
 
@@ -48,7 +52,11 @@ def main():
     u0 = np.asarray([])
     u1 = np.asarray([])
     u2 = np.asarray([])
-    # u3 = np.asarray([])
+
+    wt_measured = []
+    pv_measured = []
+    l1_measured = []
+    l2_measured = []
 
     T0 = []
     T1 = []
@@ -58,17 +66,7 @@ def main():
 
     x, lbx, ubx, lbg, ubg = solver.build_nlp()
 
-    net_cost_grid = 0
-    net_cost_bat = 0
     J = 0
-
-    # wt_pred = [30]
-    # pv_pred = [pv[0]]
-    # l1_pred = [l1[0]]
-    # l2_pred = [l2[0]]
-
-    pv_error = []
-    l_error = []
 
     for step in range(simulation_horizon - N):
         # Update NLP parameters
@@ -83,13 +81,15 @@ def main():
         l1_true = l1[step : step + N]
         l2_true = l2[step : step + N]
 
-        wt_ref = 30 * np.ones(N)
-        pv_ref = np.zeros(N)  # pv_true
+        wt_ref = wt.get_power(5 * np.ones(N))
+        pv_ref = pv_true
         l1_ref = l1_true
         l2_ref = l2_true
 
-        # pv_pred.append(pv_ref[1])
-        # l_pred.append(l_ref[1])
+        wt_measured.append(wt_ref[0])
+        pv_measured.append(pv_ref[0])
+        l1_measured.append(l1_ref[0])
+        l2_measured.append(l2_ref[0])
 
         xk_opt, Uk_opt, Tk_opt, J_opt = solver.solve_nlp(
             [x, lbx, ubx, lbg, ubg], vertcat(wt_ref, pv_ref, l1_ref, l2_ref)
@@ -99,17 +99,6 @@ def main():
         T0.append(Tk_opt[0][0])
         T1.append(Tk_opt[1][0])
         T2.append(Tk_opt[2][0])
-        """
-        xk_sim, Uk_sim = simulate_SOC(
-            xk_sim,
-            Uk_opt,
-            pv[step],
-            l[step],
-            solver.F,
-        )
-
-        x_sim = np.append(x_sim, xk_sim)
-        """
 
         if openloop:
             xk_0 = xk_opt[0][0]  # xk is optimal
@@ -152,6 +141,14 @@ def main():
 
     p.plot_data(
         np.asarray([T0, T1, T2]), title="Topology Variables", legends=["T", "B", "L"]
+    )
+
+    p.plot_data(
+        np.asarray([wt_measured, pv_measured]), title="Renewables", legends=["wt", "pv"]
+    )
+
+    p.plot_data(
+        np.asarray([l1_measured, l2_measured]), title="Loads", legends=["l1", "l2"]
     )
 
     stop = time.time()
