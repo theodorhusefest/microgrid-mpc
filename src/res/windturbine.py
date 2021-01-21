@@ -7,7 +7,7 @@ from scipy.optimize import curve_fit
 class WindTurbine:
     def __init__(self):
         self.lower = 2
-        self.upper = 16
+        self.upper = 4
         self.max_power = 810
 
         self.wind_ref = np.asarray(
@@ -79,7 +79,13 @@ class WindTurbine:
         """
         v = np.asarray(wind)
 
-        return self.func(v, *self.params)
+        v_zero = v[v <= self.lower]
+        v_lin = v[(v > self.lower) & (v < self.upper)]
+        v_nonlin = v[v >= self.upper]
+        v_zero.fill(0)
+        v_lin = 0.3 * (np.exp(v_lin) - 1)
+        v_nonlin = self.func(v_nonlin, *self.params)
+        return np.concatenate([v_zero, v_lin, v_nonlin])
 
     def curve_fitting(self, func):
         """
@@ -120,32 +126,4 @@ class WindTurbine:
 if __name__ == "__main__":
     wt = WindTurbine()
 
-    wt.get_power(
-        [
-            1.0,
-            2.0,
-            3.0,
-            4.0,
-            5.0,
-            6.0,
-            7.0,
-            8.0,
-            9.0,
-            10.0,
-            11.0,
-            12.0,
-            13.0,
-            14.0,
-            15.0,
-            16.0,
-            17.0,
-            18.0,
-            19.0,
-            20.0,
-            21.0,
-            22.0,
-            23.0,
-            24.0,
-            25.0,
-        ]
-    )
+    print(wt.get_power([3, 3.9, 4, 5, 6, 7]))
