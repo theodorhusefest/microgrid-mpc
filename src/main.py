@@ -28,7 +28,6 @@ def main():
     openloop = True
 
     predictions = conf["predictions"]
-    print("Using {} predictions.".format(predictions))
 
     actions_per_hour = conf["actions_per_hour"]
     horizon = conf["simulation_horizon"]
@@ -46,12 +45,15 @@ def main():
 
     xk_0 = conf["x0_initial"]
     xk_1 = conf["x1_initial"]
+    xk_2 = conf["x2_initial"]
     # xk_sim = conf["x_initial"]
     x0_opt = np.asarray([xk_0])
     x1_opt = np.asarray([xk_1])
+    x2_opt = np.asarray([xk_2])
     u0 = np.asarray([])
     u1 = np.asarray([])
     u2 = np.asarray([])
+    u3 = np.asarray([])
 
     wt_measured = []
     pv_measured = []
@@ -76,6 +78,9 @@ def main():
         x[1] = xk_1
         lbx[1] = xk_1
         ubx[1] = xk_1
+        x[2] = xk_2
+        lbx[2] = xk_2
+        ubx[2] = xk_2
 
         pv_true = pv[step : step + N]
         l1_true = l1[step : step + N]
@@ -103,16 +108,19 @@ def main():
         if openloop:
             xk_0 = xk_opt[0][0]  # xk is optimal
             xk_1 = xk_opt[1][0]
+            xk_2 = xk_opt[2][0]
         # else:
         #    xk = xk_sim
 
         x0_opt = np.append(x0_opt, xk_0)
         x1_opt = np.append(x1_opt, xk_1)
+        x2_opt = np.append(x2_opt, xk_2)
 
-        uk = [u[0] for u in Uk_opt]
-        u0 = np.append(u0, uk[0])
-        u1 = np.append(u1, uk[1])
-        u2 = np.append(u2, uk[2])
+        # uk = [u for u in Uk_opt]
+        u0 = np.append(u0, Uk_opt[0][0])
+        u1 = np.append(u1, Uk_opt[1][0])
+        u2 = np.append(u2, Uk_opt[2][0])
+        u3 = np.append(u3, Uk_opt[3][0])
 
         if step % 50 == 0:
             print(
@@ -130,14 +138,16 @@ def main():
             step_time = time.time()
 
     # Plotting
-    u = np.asarray([u0, u1, u2])
-
+    u = np.asarray([u0, u1, u2, u3])
     p.plot_control_actions(
-        u, horizon - T, actions_per_hour, logpath, legends=["Pb1", "Pb2", "Pg"]
+        u, horizon - T, actions_per_hour, logpath, legends=["Pb1", "Pb2", "Pb3", "Pg"]
     )
 
-    p.plot_SOC(x0_opt, horizon - T, logpath)
-    p.plot_SOC(x1_opt, horizon - T, logpath)
+    p.plot_data(
+        np.asarray([x0_opt, x1_opt, x2_opt]),
+        title="State of charge",
+        legends=["SOC0", "SOC1", "SOC2"],
+    )
 
     p.plot_data(
         np.asarray([T0, T1, T2]), title="Topology Variables", legends=["T", "B", "L"]
