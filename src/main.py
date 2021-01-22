@@ -1,5 +1,6 @@
 import time
 import numpy as np
+import pandas as pd
 from casadi import vertcat
 import matplotlib.pyplot as plt
 import utils.plots as p
@@ -86,7 +87,7 @@ def main():
         l1_true = l1[step : step + N]
         l2_true = l2[step : step + N]
 
-        wt_ref = wt.get_power(5 * np.ones(N))
+        wt_ref = wt.get_power(5 * np.ones(N) + np.random.normal(1, 0.1, N))
         pv_ref = pv_true
         l1_ref = l1_true
         l2_ref = l2_true
@@ -163,6 +164,43 @@ def main():
 
     stop = time.time()
     print("\nFinished optimation in {}s".format(np.around(stop - start_time, 2)))
+
+    data = utils.create_datafile(
+        [
+            x0_opt,
+            x1_opt,
+            x2_opt,
+            u0,
+            u1,
+            u2,
+            u3,
+            wt_measured,
+            pv_measured,
+            l1_measured,
+            l2_measured,
+            T0,
+            T1,
+            T2,
+        ],
+        names=[
+            "SOC1",
+            "SOC2",
+            "SOC3",
+            "PB1",
+            "PB2",
+            "PB3",
+            "PG",
+            "WT",
+            "PV",
+            "L1",
+            "L2",
+            "T",
+            "B",
+            "L",
+        ],
+    )
+
+    data.to_csv("./data/signals.csv")
 
     plt.show(block=True)
     plt.ion()
