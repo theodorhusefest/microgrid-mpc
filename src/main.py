@@ -7,6 +7,7 @@ import utils.plots as p
 import utils.metrics as metrics
 import utils.helpers as utils
 
+from utils.viz import GraphViz
 from ocp.linear import LinearOCP
 from res.windturbine import WindTurbine
 
@@ -200,11 +201,12 @@ def main():
         ],
     )
 
-    data.to_csv("./data/signals.csv")
+    plt.ion()
+
+    g = GraphViz(figsize=(20, 10))
+    g.plot_with_slider(data.drop(["SOC1", "SOC2", "SOC3"], axis=1))
 
     plt.show(block=True)
-    plt.ion()
-    plt.close("all")
 
 
 if __name__ == "__main__":
