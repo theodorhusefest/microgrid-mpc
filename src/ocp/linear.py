@@ -59,16 +59,7 @@ class LinearOCP:
 
         self.d = vertcat(self.l0, self.l1, self.pv, self.wt)
 
-        # Algebraic variables
-        self.l = SX.sym("l")
-        self.b = SX.sym("b")
-        self.t = SX.sym("t")
-        self.z = vertcat(self.l, self.b, self.t)
-
-        # self.lv = SX.sym("lv")
-
         self.ode = self.build_ode()
-        self.alg = self.build_algebraic_equations()
         self.L = self.build_objective_function()
         self.F = self.build_integrator()
 
@@ -91,15 +82,6 @@ class LinearOCP:
             + self.c_b2 * self.u2 ** 2
             + 100 * self.e_spot * self.u3 ** 2
         )
-
-    def build_algebraic_equations(self):
-        """
-        Build the topology contraints as algebraic equations
-        """
-        fz_1 = self.wt + self.pv + self.u2 - self.l + self.b
-        fz_2 = self.u0 + self.u1 + self.u3 - self.b
-        fz_3 = self.l - self.l0 - self.l1
-        return vertcat(fz_1, fz_2, fz_3)
 
     def build_integrator(self):
         """

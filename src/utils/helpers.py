@@ -87,20 +87,17 @@ def print_stats(PV, L, PV_pred, PL_pred):
     print("Actual energy surplus/deficit:", np.sum(PV) - np.sum(L))
 
 
-def save_datafile(signals, names=[], logpath=None):
+def create_datafile(signals, names=[], logpath=None):
     """
     Saves all signals in a csvfile called signals.csv
     """
-    if not logpath:
-        return
-
     data = {}
     for i in range(len(names)):
         data[names[i]] = signals[i]
 
     df = pd.DataFrame.from_dict(data, orient="index")
     df = df.transpose()
-    df.to_csv(logpath + "signals.csv")
+    return df
 
 
 def check_constrain_satisfaction(u0, u1, u2, u3, pv, l):
