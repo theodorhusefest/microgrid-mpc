@@ -19,9 +19,9 @@ class LinearOCP:
         self.C_MAX_0 = 300
         self.C_MAX_1 = 300
         self.C_MAX_2 = 300
-        self.nb_0 = 0.5
+        self.nb_0 = 0.8
         self.nb_1 = 0.8
-        self.nb_2 = 0.6
+        self.nb_2 = 0.8
         self.x_min = 0.3
         self.x_max = 0.9
         self.x_ref = 0.7
@@ -159,13 +159,14 @@ class LinearOCP:
             g += [
                 Xk_end[0] - Xk[0],
                 Xk_end[1] - Xk[1],
+                Xk_end[2] - Xk[2],
                 self.wt[k] + self.pv[k] + Uk[3] - Tk[0],
                 Tk[0] + Tk[1] - Tk[2],
                 Uk[0] + Uk[1] + Uk[2] - Tk[1],
                 Tk[2] - self.l0[k] - self.l1[k],
             ]
-            lbg += [0, 0, 0, 0, 0, 0]
-            ubg += [0, 0, 0, 0, 0, 0]
+            lbg += [0, 0, 0, 0, 0, 0, 0]
+            ubg += [0, 0, 0, 0, 0, 0, 0]
         prob = {
             "f": J,
             "x": vertcat(*w),
@@ -176,12 +177,11 @@ class LinearOCP:
             self.solver = nlpsol("solver", "ipopt", prob)
         else:
             opts = {
-                "verbose_init": True,
+                "verbose_init": False,
                 "ipopt": {"print_level": 0},
                 "print_time": False,
             }
             self.solver = nlpsol("solver", "ipopt", prob, opts)
-        print(w)
 
         return [w0, lbw, ubw, lbg, ubg]
 

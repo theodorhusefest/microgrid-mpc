@@ -29,8 +29,6 @@ def main():
 
     openloop = True
 
-    predictions = conf["predictions"]
-
     actions_per_hour = conf["actions_per_hour"]
     horizon = conf["simulation_horizon"]
     simulation_horizon = horizon * actions_per_hour
@@ -88,7 +86,7 @@ def main():
         l1_true = l1[step : step + N]
         l2_true = l2[step : step + N]
 
-        wt_ref = wt.get_power(5 * np.ones(N) + np.random.normal(1, 0.1, N))
+        wt_ref = wt.get_power(2 * np.ones(N) + np.random.normal(1, 0.1, N))
         pv_ref = pv_true
         l1_ref = l1_true
         l2_ref = l2_true
@@ -203,7 +201,7 @@ def main():
 
     plt.ion()
 
-    g = GraphViz(figsize=(20, 10))
+    g = GraphViz(figsize=(10, 5))
     g.plot_with_slider(data.drop(["SOC1", "SOC2", "SOC3"], axis=1))
 
     plt.show(block=True)
