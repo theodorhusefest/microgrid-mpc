@@ -1,11 +1,13 @@
 import time
 import numpy as np
+import pandas as pd
 from casadi import vertcat
 import matplotlib.pyplot as plt
 import utils.plots as p
 import utils.metrics as metrics
 import utils.helpers as utils
 
+from utils.viz import GraphViz
 from ocp.linear import LinearOCP
 from res.windturbine import WindTurbine
 
@@ -26,8 +28,6 @@ def main():
         logpath = utils.create_logs_folder(conf["logpath"], foldername)
 
     openloop = True
-
-    predictions = conf["predictions"]
 
     actions_per_hour = conf["actions_per_hour"]
     horizon = conf["simulation_horizon"]
@@ -86,7 +86,7 @@ def main():
         l1_true = l1[step : step + N]
         l2_true = l2[step : step + N]
 
-        wt_ref = wt.get_power(5 * np.ones(N))
+        wt_ref = wt.get_power(2 * np.ones(N) + np.random.normal(1, 0.1, N))
         pv_ref = pv_true
         l1_ref = l1_true
         l2_ref = l2_true
@@ -164,9 +164,47 @@ def main():
     stop = time.time()
     print("\nFinished optimation in {}s".format(np.around(stop - start_time, 2)))
 
-    plt.show(block=True)
+    data = utils.create_datafile(
+        [
+            x0_opt,
+            x1_opt,
+            x2_opt,
+            u0,
+            u1,
+            u2,
+            u3,
+            wt_measured,
+            pv_measured,
+            l1_measured,
+            l2_measured,
+            T0,
+            T1,
+            T2,
+        ],
+        names=[
+            "SOC1",
+            "SOC2",
+            "SOC3",
+            "PB1",
+            "PB2",
+            "PB3",
+            "PG",
+            "WT",
+            "PV",
+            "L1",
+            "L2",
+            "T",
+            "B",
+            "L",
+        ],
+    )
+
     plt.ion()
-    plt.close("all")
+
+    g = GraphViz(figsize=(10, 5))
+    g.plot_with_slider(data.drop(["SOC1", "SOC2", "SOC3"], axis=1))
+
+    plt.show(block=True)
 
 
 if __name__ == "__main__":

@@ -19,9 +19,9 @@ class LinearOCP:
         self.C_MAX_0 = 300
         self.C_MAX_1 = 300
         self.C_MAX_2 = 300
-        self.nb_0 = 0.5
+        self.nb_0 = 0.8
         self.nb_1 = 0.8
-        self.nb_2 = 0.6
+        self.nb_2 = 0.8
         self.x_min = 0.3
         self.x_max = 0.9
         self.x_ref = 0.7
@@ -59,16 +59,7 @@ class LinearOCP:
 
         self.d = vertcat(self.l0, self.l1, self.pv, self.wt)
 
-        # Algebraic variables
-        self.l = SX.sym("l")
-        self.b = SX.sym("b")
-        self.t = SX.sym("t")
-        self.z = vertcat(self.l, self.b, self.t)
-
-        # self.lv = SX.sym("lv")
-
         self.ode = self.build_ode()
-        self.alg = self.build_algebraic_equations()
         self.L = self.build_objective_function()
         self.F = self.build_integrator()
 
@@ -91,15 +82,6 @@ class LinearOCP:
             + self.c_b2 * self.u2 ** 2
             + 100 * self.e_spot * self.u3 ** 2
         )
-
-    def build_algebraic_equations(self):
-        """
-        Build the topology contraints as algebraic equations
-        """
-        fz_1 = self.wt + self.pv + self.u2 - self.l + self.b
-        fz_2 = self.u0 + self.u1 + self.u3 - self.b
-        fz_3 = self.l - self.l0 - self.l1
-        return vertcat(fz_1, fz_2, fz_3)
 
     def build_integrator(self):
         """
@@ -177,13 +159,14 @@ class LinearOCP:
             g += [
                 Xk_end[0] - Xk[0],
                 Xk_end[1] - Xk[1],
+                Xk_end[2] - Xk[2],
                 self.wt[k] + self.pv[k] + Uk[3] - Tk[0],
                 Tk[0] + Tk[1] - Tk[2],
                 Uk[0] + Uk[1] + Uk[2] - Tk[1],
                 Tk[2] - self.l0[k] - self.l1[k],
             ]
-            lbg += [0, 0, 0, 0, 0, 0]
-            ubg += [0, 0, 0, 0, 0, 0]
+            lbg += [0, 0, 0, 0, 0, 0, 0]
+            ubg += [0, 0, 0, 0, 0, 0, 0]
         prob = {
             "f": J,
             "x": vertcat(*w),
@@ -194,12 +177,11 @@ class LinearOCP:
             self.solver = nlpsol("solver", "ipopt", prob)
         else:
             opts = {
-                "verbose_init": True,
+                "verbose_init": False,
                 "ipopt": {"print_level": 0},
                 "print_time": False,
             }
             self.solver = nlpsol("solver", "ipopt", prob, opts)
-        print(w)
 
         return [w0, lbw, ubw, lbg, ubg]
 
