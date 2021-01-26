@@ -46,7 +46,6 @@ def main():
     xk_0 = conf["x0_initial"]
     xk_1 = conf["x1_initial"]
     xk_2 = conf["x2_initial"]
-    # xk_sim = conf["x_initial"]
     x0_opt = np.asarray([xk_0])
     x1_opt = np.asarray([xk_1])
     x2_opt = np.asarray([xk_2])
@@ -86,7 +85,7 @@ def main():
         l1_true = l1[step : step + N]
         l2_true = l2[step : step + N]
 
-        wt_ref = wt.get_power(2 * np.ones(N) + np.random.normal(1, 0.1, N))
+        wt_ref = wt.get_power(4 * np.ones(N) + np.random.normal(1, 0.1, N))
         pv_ref = pv_true
         l1_ref = l1_true
         l2_ref = l2_true
@@ -201,7 +200,7 @@ def main():
 
     plt.ion()
 
-    g = GraphViz(figsize=(10, 5))
+    g = GraphViz(figsize=(20, 10))
     g.plot_with_slider(data.drop(["SOC1", "SOC2", "SOC3"], axis=1))
 
     plt.show(block=True)

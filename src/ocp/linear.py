@@ -19,9 +19,9 @@ class LinearOCP:
         self.C_MAX_0 = 300
         self.C_MAX_1 = 300
         self.C_MAX_2 = 300
-        self.nb_0 = 0.8
-        self.nb_1 = 0.8
-        self.nb_2 = 0.8
+        self.nb_0 = 0.9
+        self.nb_1 = 0.7
+        self.nb_2 = 0.5
         self.x_min = 0.3
         self.x_max = 0.9
         self.x_ref = 0.7

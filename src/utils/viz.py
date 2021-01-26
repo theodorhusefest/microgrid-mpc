@@ -84,6 +84,7 @@ class GraphViz:
         )
 
     def plot_with_slider(self, df):
+
         plt.figure(figsize=self.figsize)
 
         axg = plt.gca()
