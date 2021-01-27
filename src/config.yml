@@ -1,9 +1,9 @@
 simulation_horizon: 24 # hours
 prediction_horizon: 2 # hours
 actions_per_hour: 6
-x0_initial: 0.4
-x1_initial: 0.4
-x2_initial: 0.4
+x0_initial: 0.32
+x1_initial: 0.32
+x2_initial: 0.32
 logpath: "./logs/"
 datafile: "./data/load_PV3.csv"
 predictions: data #  perfect, data, constant, arima, scaled_mean, best

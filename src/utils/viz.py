@@ -93,8 +93,6 @@ class GraphViz:
         self.draw(axg)
         axg.set_title("Time: 00.00", fontsize=self.font_size)
 
-        # axs = plt.axes([0.25, 0.03, 0.50, 0.02])
-
         sindex = Slider(
             plt.axes([0.25, 0.03, 0.50, 0.02]),
             "Index",

@@ -2,30 +2,33 @@ import numpy as np
 from statsmodels.tools.eval_measures import rmse
 
 
-def net_spending_grid(U, spot_price, actions_per_hour):
-    "Calculates how much buy, sell to the grid."
-    bought = U[2] * spot_price
-    sold = U[3] * spot_price
+class Metrics:
+    def __init__(self, actions_per_hour=6):
 
-    return (bought - sold) / actions_per_hour
+        self.actions_per_hour = actions_per_hour
 
+        self.grid_cost = 0
+        self.battery_cost = 0
+        self.wt_rmse = 0
+        self.pv_rmse = 0
 
-def net_change_battery(u0, u1):
-    change_c = 0
-    change_d = 0
+    def update_grid_cost(self, U, spot_price):
+        """
+        Bought from grid minus sold to grid
+        """
+        bought = U[2] * spot_price
+        sold = U[3] * spot_price
 
-    for i in range(len(u0) - 1):
-        change_c += np.abs(u0[i + 1] - u0[i])
-        change_d += np.abs(u1[i + 1] - u1[i])
+        self.grid_cost += (bought - sold) / self.actions_per_hour
 
-    return (change_c + change_d) / u0.shape[0]
+    def update_battery_cost(self, U, battery_cost, actions_per_hour):
+        """
+        Calculates battery degredation cost
+        """
+        charge = U[0] * battery_cost
+        discharge = U[1] * battery_cost
 
-
-def net_cost_battery(U, battery_cost, actions_per_hour):
-    charge = U[0] * battery_cost
-    discharge = U[1] * battery_cost
-
-    return (charge + discharge) / actions_per_hour
+        self.battery_cost = (charge + discharge) / actions_per_hour
 
 
 def rmse_predictions(real, pred):

@@ -22,10 +22,10 @@ def main():
     conf = utils.parse_config()
 
     logpath = None
-    log = input("Do you wish to log this run? ")
+    log = input("Log this run? ")
 
     if log in ["y", "yes", "Yes"]:
-        foldername = input("Do you wish to name logfolder? (enter to skip)")
+        foldername = input("Enter logfolder name? (enter to skip) ")
         logpath = utils.create_logs_folder(conf["logpath"], foldername)
 
     openloop = True
@@ -87,7 +87,7 @@ def main():
         l1_true = l1[step : step + N]
         l2_true = l2[step : step + N]
 
-        wt_ref = wt.get_power(2 * np.ones(N))
+        wt_ref = wt.get_power(3 * np.ones(N) + np.random.normal(1, 0.1, N))
         pv_ref = pv_true
         l1_ref = l1_true
         l2_ref = l2_true

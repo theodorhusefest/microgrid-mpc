@@ -1,5 +1,6 @@
-import requests
 import json
+import requests
+import numpy as np
 
 # Hourly data for the first two days.
 # Two days into the future the predicitons are for each 6h intervall.
@@ -24,4 +25,13 @@ def get_yr_data():
             x["data"]["instant"]["details"]["wind_from_direction"]
         )
 
-    return temperature, wind_speed, wind_from_direction
+    return (
+        np.asarray(temperature),
+        np.asarray(wind_speed),
+        np.asarray(wind_from_direction),
+    )
+
+
+if __name__ == "__main__":
+    temperature, wind_speed, wind_from_direction = get_yr_data()
+    print((temperature.shape[0] - 48) / 4)
