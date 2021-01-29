@@ -53,6 +53,8 @@ class LinearOCP:
         self.l0 = SX.sym("l0", self.N)  # Essential
         self.l1 = SX.sym("l1", self.N)  # Non-essential
 
+        self.E = SX.sym("E", self.N)
+
         # RES
         self.pv = SX.sym("pv", self.N)
         self.wt = SX.sym("wt", self.N)
@@ -60,8 +62,8 @@ class LinearOCP:
         self.d = vertcat(self.l0, self.l1, self.pv, self.wt)
 
         self.ode = self.build_ode()
-        self.L = self.build_objective_function()
-        self.F = self.build_integrator()
+        self.L = None
+        self.F = None
 
     def build_ode(self):
         """
@@ -72,7 +74,7 @@ class LinearOCP:
         xdot_2 = -(1 / self.C_MAX_2) * (self.nb_2 * self.u2)
         return vertcat(xdot_0, xdot_1, xdot_2)
 
-    def build_objective_function(self):
+    def build_objective_function(self, e_spot):
         """
         Builds the objective function
         """
@@ -80,17 +82,20 @@ class LinearOCP:
             self.c_b0 * self.u0 ** 2
             + self.c_b1 * self.u1 ** 2
             + self.c_b2 * self.u2 ** 2
-            + 100 * self.e_spot * self.u3 ** 2
+            + e_spot * self.u3
+            + 10 * self.u3 ** 2
         )
 
-    def build_integrator(self):
+    def build_integrator(self, e_spot):
         """
         Creates the integrator for the current system.
         """
 
         M = 4  # RK4 steps per interval
         DT = self.T / self.N / M
-        f = Function("f", [self.x, self.u], [self.ode, self.L])
+        f = Function(
+            "f", [self.x, self.u], [self.ode, self.build_objective_function(e_spot)]
+        )
         X0 = SX.sym("X0", 3)
         U = SX.sym("U", 4)
         X = X0
@@ -105,6 +110,9 @@ class LinearOCP:
         return Function("F", [X0, U], [X, Q], ["x0", "p"], ["xf", "qf"])
 
     def build_nlp(self):
+        """
+        Builds the multiple shooting NLP
+        """
 
         # Start with an empty NLP
         w = []
@@ -132,7 +140,8 @@ class LinearOCP:
             ubw += [self.Pb_max, self.Pb_max, self.Pb_max, self.Pg_max]
             w0 += [0] * self.nu
 
-            Fk = self.F(x0=Xk, p=Uk)
+            F = self.build_integrator(self.E[k])
+            Fk = F(x0=Xk, p=Uk)
             Xk_end = Fk["xf"]
             J = J + Fk["qf"]
 
@@ -171,7 +180,7 @@ class LinearOCP:
             "f": J,
             "x": vertcat(*w),
             "g": vertcat(*g),
-            "p": vertcat(self.wt, self.pv, self.l0, self.l1),
+            "p": vertcat(self.wt, self.pv, self.l0, self.l1, self.E),
         }
         if self.verbose:
             self.solver = nlpsol("solver", "ipopt", prob)

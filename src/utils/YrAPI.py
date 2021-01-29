@@ -3,7 +3,7 @@ import json
 
 # Hourly data for the first two days.
 # Two days into the future the predicitons are for each 6h intervall.
-def getYRdata():
+def get_yr_data():
     response = requests.get(
         "https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=59.233033&lon=9.263709&altitude=14",
         headers={

@@ -7,6 +7,7 @@ import utils.plots as p
 import utils.metrics as metrics
 import utils.helpers as utils
 
+from res.spot_price_test import get_spot_price_test
 from utils.viz import GraphViz
 from ocp.linear import LinearOCP
 from res.windturbine import WindTurbine
@@ -39,6 +40,7 @@ def main():
     pv, pv_pred, l1, l1_pred, l2, l2_pred, grid_buy = utils.load_data()
 
     wt = WindTurbine()
+    E = get_spot_price_test()
 
     T = conf["prediction_horizon"]
     N = conf["prediction_horizon"] * actions_per_hour
@@ -85,10 +87,11 @@ def main():
         l1_true = l1[step : step + N]
         l2_true = l2[step : step + N]
 
-        wt_ref = wt.get_power(4 * np.ones(N) + np.random.normal(1, 0.1, N))
+        wt_ref = wt.get_power(2 * np.ones(N))
         pv_ref = pv_true
         l1_ref = l1_true
         l2_ref = l2_true
+        E_ref = E[step : step + N]
 
         wt_measured.append(wt_ref[0])
         pv_measured.append(pv_ref[0])
@@ -96,7 +99,7 @@ def main():
         l2_measured.append(l2_ref[0])
 
         xk_opt, Uk_opt, Tk_opt, J_opt = solver.solve_nlp(
-            [x, lbx, ubx, lbg, ubg], vertcat(wt_ref, pv_ref, l1_ref, l2_ref)
+            [x, lbx, ubx, lbg, ubg], vertcat(wt_ref, pv_ref, l1_ref, l2_ref, E_ref)
         )
         J += J_opt
 
@@ -159,6 +162,8 @@ def main():
     p.plot_data(
         np.asarray([l1_measured, l2_measured]), title="Loads", legends=["l1", "l2"]
     )
+
+    p.plot_data(np.asarray([E]), title="Spot Prices")
 
     stop = time.time()
     print("\nFinished optimation in {}s".format(np.around(stop - start_time, 2)))
