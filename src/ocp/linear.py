@@ -212,7 +212,7 @@ class LinearOCP:
         x_opt = [w_opt[7::n], w_opt[8::n], w_opt[9::n]]
         u_opt = [w_opt[3::n], w_opt[4::n], w_opt[5::n], w_opt[6::n]]
         t_opt = [w_opt[10::n], w_opt[11::n], w_opt[12::n]]
-        return x_opt, u_opt, t_opt, J_opt
+        return x_opt, u_opt, t_opt
 
     def test_integrator(self):
         """

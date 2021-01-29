@@ -66,10 +66,9 @@ def main():
     T2 = []
 
     solver = LinearOCP(T, N)
+    sys_metrics = metrics.SystemMetrics()
 
     x, lbx, ubx, lbg, ubg = solver.build_nlp()
-
-    J = 0
 
     for step in range(simulation_horizon - N):
         # Update NLP parameters
@@ -98,10 +97,9 @@ def main():
         l1_measured.append(l1_ref[0])
         l2_measured.append(l2_ref[0])
 
-        xk_opt, Uk_opt, Tk_opt, J_opt = solver.solve_nlp(
+        xk_opt, Uk_opt, Tk_opt = solver.solve_nlp(
             [x, lbx, ubx, lbg, ubg], vertcat(wt_ref, pv_ref, l1_ref, l2_ref, E_ref)
         )
-        J += J_opt
 
         T0.append(Tk_opt[0][0])
         T1.append(Tk_opt[1][0])
@@ -124,20 +122,12 @@ def main():
         u2 = np.append(u2, Uk_opt[2][0])
         u3 = np.append(u3, Uk_opt[3][0])
 
-        if step % 50 == 0:
-            print(
-                "\nFinshed iteration step {}. Current step took {}s".format(
-                    step, np.around(time.time() - step_time, 2)
-                )
-            )
-            print(
-                "xsim {}%, x_opt {},{}%".format(
-                    np.around(0.5, 2),
-                    np.around(xk_opt[0][0], 2),
-                    np.around(xk_opt[1][0], 2),
-                )
-            )
-            step_time = time.time()
+        sys_metrics.update_metrics([u0[step], u1[step], u2[step], u3[step]], E[step])
+
+        utils.print_status(step, [xk_0, xk_1, xk_2], step_time, every=50)
+        step_time = time.time()
+
+    sys_metrics.print_metrics()
 
     # Plotting
     u = np.asarray([u0, u1, u2, u3])

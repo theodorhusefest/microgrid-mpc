@@ -1,6 +1,7 @@
 import os
 import shutil
 import yaml
+import time
 import pandas as pd
 import numpy as np
 from datetime import datetime
@@ -71,20 +72,14 @@ def load_data():
     return [PV, PV_pred, L1, L1_pred, L2, L2_pred, grid_buy]
 
 
-def print_stats(PV, L, PV_pred, PL_pred):
-    print(
-        "Predicted energy produced {}, predicted energy consumed {}".format(
-            np.sum(PV_pred), np.sum(PL_pred)
-        )
-    )
-
-    print(
-        "Actual energy produced {}, actual energy consumed {}".format(
-            np.sum(PV), np.sum(L)
-        )
-    )
-    print("Predicted energy surplus/deficit:", np.sum(PV_pred) - np.sum(PL_pred))
-    print("Actual energy surplus/deficit:", np.sum(PV) - np.sum(L))
+def print_status(step, X, step_time, every=50):
+    if step % every == 0:
+        print("\nSTATUS - STEP {}".format(step))
+        print("-" * 100)
+        print("Current step took {}s".format(np.around(time.time() - step_time, 2)))
+        for i, x in enumerate(X):
+            print("x{}: {} %".format(i + 1, np.around(x, 2)))
+        print("-" * 100)
 
 
 def create_datafile(signals, names=[], logpath=None):
