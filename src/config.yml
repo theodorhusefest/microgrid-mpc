@@ -6,6 +6,7 @@ x1_initial: 0.32
 x2_initial: 0.32
 logpath: "./logs/"
 datafile: "./data/load_PV3.csv"
+loads_trainfile: "./data/loads_train.csv"
 predictions: data #  perfect, data, constant, arima, scaled_mean, best
 plot_predictions: False
 

@@ -7,10 +7,11 @@ import utils.plots as p
 import utils.metrics as metrics
 import utils.helpers as utils
 
-from res.spot_price_test import get_spot_price_test
+from profiles.spot_price_test import get_spot_price_test
 from utils.viz import GraphViz
 from ocp.linear import LinearOCP
-from res.windturbine import WindTurbine
+from profiles.windturbine import WindTurbine
+from profiles.loads import Load
 
 # from simulations.simulate_SOC import simulate_SOC
 
@@ -20,6 +21,8 @@ def main():
     Main function for mpc-scheme with receding horizion.
     """
     conf = utils.parse_config()
+    datafile = conf["datafile"]
+    loads_trainfile = conf["loads_trainfile"]
 
     logpath = None
     log = input("Log this run? ")
@@ -34,16 +37,18 @@ def main():
     horizon = conf["simulation_horizon"]
     simulation_horizon = horizon * actions_per_hour
 
+    T = conf["prediction_horizon"]
+    N = conf["prediction_horizon"] * actions_per_hour
+
     start_time = time.time()
     step_time = start_time
 
     pv, pv_pred, l1, l1_pred, l2, l2_pred, grid_buy = utils.load_data()
 
+    l1 = Load(N, loads_trainfile, "L1", groundtruth=datafile)
+    l2 = Load(N, loads_trainfile, "L2", groundtruth=datafile)
     wt = WindTurbine()
     E = get_spot_price_test()
-
-    T = conf["prediction_horizon"]
-    N = conf["prediction_horizon"] * actions_per_hour
 
     xk_0 = conf["x0_initial"]
     xk_1 = conf["x1_initial"]
@@ -83,13 +88,13 @@ def main():
         ubx[2] = xk_2
 
         pv_true = pv[step : step + N]
-        l1_true = l1[step : step + N]
-        l2_true = l2[step : step + N]
+        l1_true = l1.get_groundtruth(step)
+        l2_true = l2.get_groundtruth(step)
 
         wt_ref = wt.get_power(3 * np.ones(N) + np.random.normal(1, 0.1, N))
         pv_ref = pv_true
-        l1_ref = l1_true
-        l2_ref = l2_true
+        l1_ref = l1.get_scaled_mean(l1_true[0], step)
+        l2_ref = l2.get_scaled_mean(l2_true[0], step)
         E_ref = E[step : step + N]
 
         wt_measured.append(wt_ref[0])

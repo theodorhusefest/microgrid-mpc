@@ -48,11 +48,11 @@ def load_data():
     datafile = conf["datafile"]
 
     data = pd.read_csv(datafile)
-    if "P1" in data.columns:
-        L1 = data.P1.to_numpy()
-        L2 = data.P2.to_numpy()
+    if "L1" in data.columns:
+        L1 = data.L1.to_numpy()
+        L2 = data.L2.to_numpy()
     else:
-        L = data.PL.to_numpy()
+        L = data.L.to_numpy()
     PV = data.PV.to_numpy()
 
     if "Spot_pris" in data.columns:
