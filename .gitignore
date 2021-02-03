@@ -1,5 +1,6 @@
 # Folders
 src/logs/
+src/data_collect/
 src/sim-data/
 **.vscode/
 # Byte-compiled / optimized / DLL files
@@ -132,3 +133,5 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+.python_packages

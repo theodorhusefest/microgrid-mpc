@@ -1,12 +1,15 @@
 from casadi import *
 import numpy as np
+import pandas as pd
 
 
 class Photovoltaic:
+
+    # Parameters from Vinod2018
     def __init__(
         self,
         Pm=320,
-        Im=8.56,
+        Im=8.36,
         Vm=37.38,
         Voc=46.22,
         Isc=9.06,
@@ -32,7 +35,11 @@ class Photovoltaic:
         self.q = 1.602e-19  # Electron charge
         self.Tref = 298.15  # Ref temp STC of 25C in Kelvin
         self.Gref = 1000  # Ref solar STC
+
         self.solver = None
+
+        self.estimate()
+        self.create_nlp()
 
     def estimate(self):
         I = SX.sym("I")
@@ -77,12 +84,12 @@ class Photovoltaic:
 
         self.I_value = res_nlp["x"][0]
         self.V_value = res_nlp["x"][1]
-        print(self.V_value, ">V")
-        print(self.I_value, ">I")
+        # print(self.V_value, ">V")
+        # print(self.I_value, ">I")
         self.rs = res_nlp["x"][2]
         self.rsh = res_nlp["x"][3]
 
-        print("Estimated: Rs = ", self.rs, " Rsh = ", self.rsh)
+        # print("Estimated: Rs = ", self.rs, " Rsh = ", self.rsh)
 
     def create_nlp(self):
         I = SX.sym("I")
@@ -128,13 +135,21 @@ class Photovoltaic:
         res_nlp = self.solver(x0=x0, lbx=lbx, ubx=ubx, lbg=lbg, ubg=ubg, p=param)
         self.I_value = res_nlp["x"][0]
         self.V_value = res_nlp["x"][1]
-        print(self.V_value, "her")
-        print(self.I_value, "heri")
+        # print(self.V_value, "her")
+        # print(self.I_value, "heri")
+
+        # print("Power:", self.V_value * self.I_value)
+        return (self.V_value * self.I_value).full().flatten()[0]
+
+    def predict(self, T, G):
+        assert len(T) == len(G)
+        return np.asarray([self.solve_prob(T[i], G[i]) for i in range(len(T))])
 
 
-# Parameters from Vinod2018
-new_object = Photovoltaic(320, 8.56, 37.38, 46.22, 9.06, 72, 1.3, 0.058, 1.1)
+if __name__ == "__main__":
 
-new_object.estimate()
-new_object.create_nlp()
-new_object.solve_prob(11.45, 99.52)
+    PV = Photovoltaic()
+
+    df = pd.read_csv("./solcast_2021-02-03_10.csv.gzip", compression="gzip")
+    pred = PV.predict(df.iloc[:6].temp.values, df.iloc[:6].GHI.values)
+    print(pred)
