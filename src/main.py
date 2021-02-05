@@ -60,6 +60,10 @@ def main():
     u1 = np.asarray([])
     u2 = np.asarray([])
     u3 = np.asarray([])
+    u4 = np.asarray([])
+    u5 = np.asarray([])
+    u6 = np.asarray([])
+    u7 = np.asarray([])
 
     wt_measured = []
     pv_measured = []
@@ -93,8 +97,8 @@ def main():
 
         wt_ref = wt.get_power(3 * np.ones(N) + np.random.normal(1, 0.1, N))
         pv_ref = pv_true
-        l1_ref = l1.get_scaled_mean(l1_true[0], step)
-        l2_ref = l2.get_scaled_mean(l2_true[0], step)
+        l1_ref = l1_true  # l1.get_scaled_mean(l1_true[0], step)
+        l2_ref = l2_true  # l2.get_scaled_mean(l2_true[0], step)
         E_ref = E[step : step + N]
 
         wt_measured.append(wt_ref[0])
@@ -121,11 +125,10 @@ def main():
         x1_opt = np.append(x1_opt, xk_1)
         x2_opt = np.append(x2_opt, xk_2)
 
-        # uk = [u for u in Uk_opt]
-        u0 = np.append(u0, Uk_opt[0][0])
-        u1 = np.append(u1, Uk_opt[1][0])
-        u2 = np.append(u2, Uk_opt[2][0])
-        u3 = np.append(u3, Uk_opt[3][0])
+        u0 = np.append(u0, Uk_opt[0][0] - Uk_opt[1][0])
+        u1 = np.append(u1, Uk_opt[2][0] - Uk_opt[3][0])
+        u2 = np.append(u2, Uk_opt[4][0] - Uk_opt[5][0])
+        u3 = np.append(u3, Uk_opt[6][0] - Uk_opt[7][0])
 
         sys_metrics.update_metrics([u0[step], u1[step], u2[step], u3[step]], E[step])
 

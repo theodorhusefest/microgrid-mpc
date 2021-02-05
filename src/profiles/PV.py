@@ -150,6 +150,8 @@ if __name__ == "__main__":
 
     PV = Photovoltaic()
 
-    df = pd.read_csv("./solcast_2021-02-03_10.csv.gzip", compression="gzip")
+    df = pd.read_csv("./profiles/solcast_2021-02-03_10.csv.gzip", compression="gzip")
     pred = PV.predict(df.iloc[:6].temp.values, df.iloc[:6].GHI.values)
     print(pred)
+
+    print([12, 13] + [14, 15])

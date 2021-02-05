@@ -1,16 +1,16 @@
+import numpy as np
 from casadi import *
 import matplotlib.pyplot as plt
 
 
 class LinearOCP:
     def __init__(self, T, N):
-
         self.T = T
         self.N = N
         self.verbose = False
 
         self.nx = 3
-        self.nu = 4
+        self.nu = 8
         self.nt = 3
         self.nd = 4
 
@@ -21,13 +21,13 @@ class LinearOCP:
         self.C_MAX_2 = 300
         self.nb_0 = 0.9
         self.nb_1 = 0.7
-        self.nb_2 = 0.5
+        self.nb_2 = 0.6
         self.x_min = 0.3
         self.x_max = 0.9
         self.x_ref = 0.7
         self.Pb_max = 1000  # Max power from battery
         self.Pg_max = 1000  # Max power from grid
-        self.P_max = 1000  # Wire transmission maximum
+        self.P_max = 950  # Wire transmission maximum
 
         # Cost function variables
         self.c_b0 = 10
@@ -35,6 +35,7 @@ class LinearOCP:
         self.c_b2 = 10
         self.grid_cost = 10
         self.e_spot = 0.7
+        self.ref_cost = 1
 
         # Define symbolic expressions
         self.x0 = SX.sym("x0")
@@ -42,11 +43,24 @@ class LinearOCP:
         self.x2 = SX.sym("x2")
         self.x = vertcat(self.x0, self.x1, self.x2)
 
-        self.u0 = SX.sym("u0")  # PB1
-        self.u1 = SX.sym("u1")  # PB2
-        self.u2 = SX.sym("u2")  # PB3
-        self.u3 = SX.sym("u3")  # PG
-        self.u = vertcat(self.u0, self.u1, self.u2, self.u3)
+        self.PB1c = SX.sym("PB1c")  # PB1
+        self.PB1d = SX.sym("PB1d")  # PB1
+        self.PB2c = SX.sym("PB2c")  # PB2
+        self.PB2d = SX.sym("PB2d")  # PB1
+        self.PB3c = SX.sym("PB3c")  # PB3
+        self.PB3d = SX.sym("PB3d")  # PB1
+        self.PGb = SX.sym("PGb")  # PG
+        self.PGs = SX.sym("PGs")  # PG
+        self.u = vertcat(
+            self.PB1c,
+            self.PB1d,
+            self.PB2c,
+            self.PB2d,
+            self.PB3c,
+            self.PB3d,
+            self.PGb,
+            self.PGs,
+        )
 
         # Disturbances
         # Loads
@@ -69,9 +83,9 @@ class LinearOCP:
         """
         Build the ODE used in the system
         """
-        xdot_0 = -(1 / self.C_MAX_0) * (self.nb_0 * self.u0)
-        xdot_1 = -(1 / self.C_MAX_1) * (self.nb_1 * self.u1)
-        xdot_2 = -(1 / self.C_MAX_2) * (self.nb_2 * self.u2)
+        xdot_0 = (1 / self.C_MAX_0) * (self.nb_0 * self.PB1c - self.PB1d / self.nb_0)
+        xdot_1 = (1 / self.C_MAX_1) * (self.nb_1 * self.PB2c - self.PB2d / self.nb_1)
+        xdot_2 = (1 / self.C_MAX_2) * (self.nb_2 * self.PB3c - self.PB3d / self.nb_2)
         return vertcat(xdot_0, xdot_1, xdot_2)
 
     def build_objective_function(self, e_spot):
@@ -79,11 +93,18 @@ class LinearOCP:
         Builds the objective function
         """
         return (
-            self.c_b0 * self.u0 ** 2
-            + self.c_b1 * self.u1 ** 2
-            + self.c_b2 * self.u2 ** 2
-            + e_spot * self.u3
-            + 10 * self.u3 ** 2
+            self.c_b0 * (self.PB1c + self.PB1d)
+            + self.c_b1 * (self.PB2c + self.PB2d)
+            + self.c_b2 * (self.PB3c + self.PB3d)
+            + self.ref_cost * ((self.x_ref - self.x0) * 100) ** 2
+            + self.ref_cost * ((self.x_ref - self.x1) * 100) ** 2
+            + self.ref_cost * ((self.x_ref - self.x2) * 100) ** 2
+            + 10 * (self.PGb + self.PGs) ** 2
+            + e_spot * (self.PGb - self.PGs)
+            + 1000 * self.PB1c * self.PB1d
+            + 1000 * self.PB2c * self.PB2d
+            + 1000 * self.PB3c * self.PB3d
+            + 1000 * self.PGb * self.PGs
         )
 
     def build_integrator(self, e_spot):
@@ -97,7 +118,7 @@ class LinearOCP:
             "f", [self.x, self.u], [self.ode, self.build_objective_function(e_spot)]
         )
         X0 = SX.sym("X0", 3)
-        U = SX.sym("U", 4)
+        U = SX.sym("U", 8)
         X = X0
         Q = 0
         for _ in range(M):
@@ -134,10 +155,10 @@ class LinearOCP:
         # Formulate the NLP
         for k in range(self.N):
             # New NLP variable for the control
-            Uk = SX.sym("U_" + str(k), 4)
+            Uk = SX.sym("U_" + str(k), 8)
             w += [Uk]
-            lbw += [-self.Pb_max, -self.Pb_max, -self.Pb_max, -self.Pg_max]
-            ubw += [self.Pb_max, self.Pb_max, self.Pb_max, self.Pg_max]
+            lbw += [0] * self.nu
+            ubw += [self.Pb_max] * 6 + [self.Pg_max] * 2
             w0 += [0] * self.nu
 
             F = self.build_integrator(self.E[k])
@@ -165,17 +186,18 @@ class LinearOCP:
             # Tk[0] = P_T  Transformer
             # Tk[1] = P_B  Battery
             # Tk[2] = P_L  Loads
-            g += [
+            eq_constraints = [
                 Xk_end[0] - Xk[0],
                 Xk_end[1] - Xk[1],
                 Xk_end[2] - Xk[2],
-                self.wt[k] + self.pv[k] + Uk[3] - Tk[0],
+                self.wt[k] + self.pv[k] + Uk[6] - Uk[7] - Tk[0],
                 Tk[0] + Tk[1] - Tk[2],
-                Uk[0] + Uk[1] + Uk[2] - Tk[1],
+                Uk[0] - Uk[1] + Uk[2] - Uk[3] + Uk[4] - Uk[5] - Tk[1],
                 Tk[2] - self.l0[k] - self.l1[k],
             ]
-            lbg += [0, 0, 0, 0, 0, 0, 0]
-            ubg += [0, 0, 0, 0, 0, 0, 0]
+            g += eq_constraints
+            lbg += [0] * len(eq_constraints)
+            ubg += [0] * len(eq_constraints)
         prob = {
             "f": J,
             "x": vertcat(*w),
@@ -187,11 +209,10 @@ class LinearOCP:
         else:
             opts = {
                 "verbose_init": False,
-                "ipopt": {"print_level": 0},
+                "ipopt": {"print_level": 2},
                 "print_time": False,
             }
             self.solver = nlpsol("solver", "ipopt", prob, opts)
-
         return [w0, lbw, ubw, lbg, ubg]
 
     def solve_nlp(self, params, p_ref):
@@ -209,25 +230,19 @@ class LinearOCP:
 
         n = int(len(params[0]) / self.N)
 
-        x_opt = [w_opt[7::n], w_opt[8::n], w_opt[9::n]]
-        u_opt = [w_opt[3::n], w_opt[4::n], w_opt[5::n], w_opt[6::n]]
-        t_opt = [w_opt[10::n], w_opt[11::n], w_opt[12::n]]
+        x_opt = [w_opt[self.nx + self.nu + i :: n] for i in range(self.nx)]
+        u_opt = [w_opt[self.nx + i :: n] for i in range(self.nu)]
+        t_opt = [w_opt[2 * self.nx + self.nu + i :: n] for i in range(self.nt)]
+
+        self.test_mutual_exclusive(u_opt)
         return x_opt, u_opt, t_opt
 
-    def test_integrator(self):
-        """
-        Tests a single point
-        """
-        print("Testing integrator")
-        Fk = self.F(
-            x0=[0.4, 0.4],
-            p=[
-                -100,
-                0,
-                0,
-            ],
-        )
-        print(Fk["xf"])
+    def test_mutual_exclusive(self, u_opt):
+
+        for i in range(len(u_opt[0])):
+            for j in range(0, len(u_opt), 2):
+                if not (np.around(u_opt[j][i], 1) * np.around(u_opt[j + 1][i], 1) == 0):
+                    print("U1 {}, U2 {}.".format(u_opt[j][i], 1, u_opt[j + 1][i], 1))
 
 
 if __name__ == "__main__":
