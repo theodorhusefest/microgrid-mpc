@@ -21,7 +21,7 @@ def create_folder(folderpath):
     """
     Creates a folder
     """
-    if not os.path.exists(folderpath):
+    if is_active.exists(folderpath):
         os.makedirs(folderpath)
 
 
@@ -103,5 +103,64 @@ def check_constrain_satisfaction(u0, u1, u2, u3, pv, l):
         raise ValueError
 
 
-if __name__ == "__main__":
-    parse_config()
+def calculate_real_u(Uk, Tk, wt, pv, l1, l2):
+
+    gen_error = np.around(wt + pv + Uk[6] - Uk[7] - Tk[0], 2)
+    L_error = np.around(Tk[2] - l1 - l2, 2)
+
+    if gen_error > 0:  # Surplus of energy in gen-node
+        gen_error = np.abs(gen_error)
+        if is_active(Uk[6]) and Uk[6] > gen_error:  # If buying energy buy less
+            Uk[6] -= gen_error
+        elif is_active(Uk[6]):  # Stop buying, then sell remaining
+            Uk[7] += gen_error - Uk[6]
+            Uk[6] = 0
+        else:  # if selling -> sell more
+            Uk[7] += gen_error
+
+    elif gen_error < 0:  # Energy deficit in gen-node
+        gen_error = np.abs(gen_error)
+        if is_active(Uk[7]) and Uk[7] > gen_error:  # If selling -> sell less
+            Uk[7] -= gen_error
+        elif is_active(Uk[7]):
+            Uk[6] += gen_error - Uk[7]
+            Uk[7] = 0
+        else:  # if buying -> buy more
+            Uk[6] += gen_error
+
+    if L_error > 0:  # Surplus of energy in load-node
+        L_error = np.abs(L_error)
+        Tk[2] -= L_error
+        Tk[1] -= L_error
+
+        if is_active(Uk[0]) and Uk[0] > L_error:
+            Uk[0] -= L_error
+        elif is_active(Uk[0]):
+            Uk[1] += L_error - Uk[0]
+            Uk[0] = 0
+        else:
+            Uk[1] += L_error
+
+    elif L_error < 0:  # Energy deficit in load-node
+        L_error = np.abs(L_error)
+        Tk[2] += L_error
+        Tk[1] += L_error
+
+        if is_active(Uk[1]) and Uk[1] > L_error:
+            Uk[1] -= L_error
+        elif is_active(Uk[1]):
+            Uk[0] += L_error - Uk[1]
+            Uk[1] = 0
+        else:
+            Uk[0] += L_error
+
+    assert np.around(wt + pv + Uk[6] - Uk[7] - Tk[0], 2) == 0
+    assert np.around(Tk[0] + Tk[1] - Tk[2], 2) == 0
+    assert np.around(Uk[0] - Uk[1] + Uk[2] - Uk[3] + Uk[4] - Uk[5] - Tk[1], 2) == 0
+    assert np.around(Tk[2] - l1 - l2, 2) == 0
+
+    return Uk, Tk
+
+
+def is_active(x):
+    return np.around(x, 3) != 0

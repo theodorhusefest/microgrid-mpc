@@ -7,13 +7,12 @@ import utils.plots as p
 import utils.metrics as metrics
 import utils.helpers as utils
 
-from profiles.spot_price_test import get_spot_price_test
+from components.spot_price_test import get_spot_price_test
 from utils.viz import GraphViz
 from ocp.linear import LinearOCP
-from profiles.windturbine import WindTurbine
-from profiles.loads import Load
-
-# from simulations.simulate_SOC import simulate_SOC
+from components.windturbine import WindTurbine
+from components.loads import Load
+from components.battery import Battery
 
 
 def main():
@@ -49,21 +48,14 @@ def main():
     l2 = Load(N, loads_trainfile, "L2", groundtruth=datafile)
     wt = WindTurbine()
     E = get_spot_price_test()
+    B1 = Battery(T, N, **conf["components"]["B1"])
+    B2 = Battery(T, N, **conf["components"]["B1"])
+    B3 = Battery(T, N, **conf["components"]["B1"])
 
-    xk_0 = conf["x0_initial"]
-    xk_1 = conf["x1_initial"]
-    xk_2 = conf["x2_initial"]
-    x0_opt = np.asarray([xk_0])
-    x1_opt = np.asarray([xk_1])
-    x2_opt = np.asarray([xk_2])
     u0 = np.asarray([])
     u1 = np.asarray([])
     u2 = np.asarray([])
     u3 = np.asarray([])
-    u4 = np.asarray([])
-    u5 = np.asarray([])
-    u6 = np.asarray([])
-    u7 = np.asarray([])
 
     wt_measured = []
     pv_measured = []
@@ -81,58 +73,60 @@ def main():
 
     for step in range(simulation_horizon - N):
         # Update NLP parameters
-        x[0] = xk_0
-        lbx[0] = xk_0
-        ubx[0] = xk_0
-        x[1] = xk_1
-        lbx[1] = xk_1
-        ubx[1] = xk_1
-        x[2] = xk_2
-        lbx[2] = xk_2
-        ubx[2] = xk_2
+        x[0] = B1.get_SOC()
+        lbx[0] = B1.get_SOC()
+        ubx[0] = B1.get_SOC()
+        x[1] = B2.get_SOC()
+        lbx[1] = B2.get_SOC()
+        ubx[1] = B2.get_SOC()
+        x[2] = B3.get_SOC()
+        lbx[2] = B3.get_SOC()
+        ubx[2] = B3.get_SOC()
 
+        wt_true = wt.get_power(2 * np.ones(N))
         pv_true = pv[step : step + N]
         l1_true = l1.get_groundtruth(step)
         l2_true = l2.get_groundtruth(step)
 
-        wt_ref = wt.get_power(3 * np.ones(N) + np.random.normal(1, 0.1, N))
+        wt_ref = wt.get_power(2 * np.ones(N))  # + np.random.normal(1, 0.1, N))
         pv_ref = pv_true
-        l1_ref = l1_true  # l1.get_scaled_mean(l1_true[0], step)
-        l2_ref = l2_true  # l2.get_scaled_mean(l2_true[0], step)
+        l1_ref = l1.get_scaled_mean(l1_true[1], step)
+        l2_ref = l2.get_scaled_mean(l2_true[1], step)
         E_ref = E[step : step + N]
 
         wt_measured.append(wt_ref[0])
-        pv_measured.append(pv_ref[0])
-        l1_measured.append(l1_ref[0])
-        l2_measured.append(l2_ref[0])
+        pv_measured.append(pv_true[0])
+        l1_measured.append(l1_true[0])
+        l2_measured.append(l2_true[0])
 
         xk_opt, Uk_opt, Tk_opt = solver.solve_nlp(
             [x, lbx, ubx, lbg, ubg], vertcat(wt_ref, pv_ref, l1_ref, l2_ref, E_ref)
         )
+        uk = [u[0] for u in Uk_opt]
+        Tk = [T[0] for T in Tk_opt]
 
-        T0.append(Tk_opt[0][0])
-        T1.append(Tk_opt[1][0])
-        T2.append(Tk_opt[2][0])
+        T0.append(Tk[0])
+        T1.append(Tk[1])
+        T2.append(Tk[2])
 
-        if openloop:
-            xk_0 = xk_opt[0][0]  # xk is optimal
-            xk_1 = xk_opt[1][0]
-            xk_2 = xk_opt[2][0]
-        # else:
-        #    xk = xk_sim
+        Uk_sim, Tk_sim = utils.calculate_real_u(
+            uk, Tk, wt_true[0], pv_true[0], l1_true[0], l2_true[0]
+        )
 
-        x0_opt = np.append(x0_opt, xk_0)
-        x1_opt = np.append(x1_opt, xk_1)
-        x2_opt = np.append(x2_opt, xk_2)
+        B1.simulate_SOC(xk_opt[0][0], [uk[0], uk[1]])
+        B2.simulate_SOC(xk_opt[1][0], [uk[2], uk[3]])
+        B3.simulate_SOC(xk_opt[2][0], [uk[4], uk[5]])
 
-        u0 = np.append(u0, Uk_opt[0][0] - Uk_opt[1][0])
-        u1 = np.append(u1, Uk_opt[2][0] - Uk_opt[3][0])
-        u2 = np.append(u2, Uk_opt[4][0] - Uk_opt[5][0])
-        u3 = np.append(u3, Uk_opt[6][0] - Uk_opt[7][0])
+        u0 = np.append(u0, uk[0] - uk[1])
+        u1 = np.append(u1, uk[2] - uk[3])
+        u2 = np.append(u2, uk[4] - uk[5])
+        u3 = np.append(u3, uk[6] - uk[7])
 
         sys_metrics.update_metrics([u0[step], u1[step], u2[step], u3[step]], E[step])
 
-        utils.print_status(step, [xk_0, xk_1, xk_2], step_time, every=50)
+        utils.print_status(
+            step, [B1.get_SOC(), B2.get_SOC(), B3.get_SOC()], step_time, every=50
+        )
         step_time = time.time()
 
     sys_metrics.print_metrics()
@@ -144,7 +138,7 @@ def main():
     )
 
     p.plot_data(
-        np.asarray([x0_opt, x1_opt, x2_opt]),
+        np.asarray([B1.x_sim, B2.x_sim, B3.x_sim]),
         title="State of charge",
         legends=["SOC0", "SOC1", "SOC2"],
     )
@@ -168,9 +162,9 @@ def main():
 
     data = utils.create_datafile(
         [
-            x0_opt,
-            x1_opt,
-            x2_opt,
+            B1.x_sim,
+            B2.x_sim,
+            B3.x_sim,
             u0,
             u1,
             u2,
@@ -205,8 +199,9 @@ def main():
 
     g = GraphViz(figsize=(20, 10))
     g.plot_with_slider(data.drop(["SOC1", "SOC2", "SOC3"], axis=1))
+    if True:
 
-    plt.show(block=True)
+        plt.show(block=True)
 
 
 if __name__ == "__main__":

@@ -19,9 +19,9 @@ class LinearOCP:
         self.C_MAX_0 = 300
         self.C_MAX_1 = 300
         self.C_MAX_2 = 300
-        self.nb_0 = 0.9
-        self.nb_1 = 0.7
-        self.nb_2 = 0.6
+        self.nb_0 = 0.913
+        self.nb_1 = 0.913
+        self.nb_2 = 0.913
         self.x_min = 0.3
         self.x_max = 0.9
         self.x_ref = 0.7
@@ -93,9 +93,9 @@ class LinearOCP:
         Builds the objective function
         """
         return (
-            self.c_b0 * (self.PB1c + self.PB1d)
-            + self.c_b1 * (self.PB2c + self.PB2d)
-            + self.c_b2 * (self.PB3c + self.PB3d)
+            self.c_b0 * (self.PB1c - self.PB1d) ** 2
+            + self.c_b1 * (self.PB2c - self.PB2d) ** 2
+            + self.c_b2 * (self.PB3c - self.PB3d) ** 2
             + self.ref_cost * ((self.x_ref - self.x0) * 100) ** 2
             + self.ref_cost * ((self.x_ref - self.x1) * 100) ** 2
             + self.ref_cost * ((self.x_ref - self.x2) * 100) ** 2
