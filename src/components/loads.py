@@ -13,7 +13,11 @@ class Load:
         self.df = pd.read_csv(self.train_file, parse_dates=["date"])
         self.mean = self.get_mean_day()
 
-        if groundtruth:
+        if isinstance(groundtruth, pd.Series):
+            self.true = self.groundtruth.values
+        elif isinstance(groundtruth, pd.DataFrame):
+            self.true = self.groundtruth[column].values
+        elif isinstance(groundtruth, str):
             self.true = pd.read_csv(self.groundtruth)[self.column].values
 
     def get_mean_day(self):
@@ -24,7 +28,7 @@ class Load:
         num_datapoints = 24 * 60 / self.resolution
         days = []
         grouped = self.df.groupby([self.df.date.dt.floor("d")], as_index=False)
-        for _, group in grouped:H
+        for _, group in grouped:
             if len(group) != num_datapoints:
                 continue
             days.append(group[self.column].values)
@@ -41,12 +45,18 @@ class Load:
         """
         Returns the mean for the next N steps, scaled to current measurement
         """
-        return (measurement / self.mean[step]) * self.mean[step : step + self.N]
+        pred = (measurement / self.mean[step]) * self.mean[step : step + self.N + 1][1:]
+        return pred
+
+    def get_constant_pred(self, measurement, step):
+        """
+        Returns the current measurement as prediction for N
+        """
+        return measurement * np.ones(self.N)
 
     def get_groundtruth(self, step):
-        if self.groundtruth == None:
-            print("Groundtruth not provided")
-            raise ValueError
+        if self.groundtruth is None:
+            raise ValueError("Groundtruth not provided")
 
         return self.true[step : step + self.N]
 
