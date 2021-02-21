@@ -24,7 +24,7 @@ class Load:
         num_datapoints = 24 * 60 / self.resolution
         days = []
         grouped = self.df.groupby([self.df.date.dt.floor("d")], as_index=False)
-        for _, group in grouped:
+        for _, group in grouped:H
             if len(group) != num_datapoints:
                 continue
             days.append(group[self.column].values)
