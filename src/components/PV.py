@@ -8,10 +8,10 @@ class Photovoltaic:
     # Parameters from Vinod2018
     def __init__(
         self,
-        Pm=320,
+        Pm=800,
         Im=8.36,
         Vm=37.38,
-        Voc=46.22,
+        Voc=100,
         Isc=9.06,
         Ns=72,
         A=1.3,
@@ -84,12 +84,8 @@ class Photovoltaic:
 
         self.I_value = res_nlp["x"][0]
         self.V_value = res_nlp["x"][1]
-        # print(self.V_value, ">V")
-        # print(self.I_value, ">I")
         self.rs = res_nlp["x"][2]
         self.rsh = res_nlp["x"][3]
-
-        # print("Estimated: Rs = ", self.rs, " Rsh = ", self.rsh)
 
     def create_nlp(self):
         I = SX.sym("I")
@@ -135,10 +131,7 @@ class Photovoltaic:
         res_nlp = self.solver(x0=x0, lbx=lbx, ubx=ubx, lbg=lbg, ubg=ubg, p=param)
         self.I_value = res_nlp["x"][0]
         self.V_value = res_nlp["x"][1]
-        # print(self.V_value, "her")
-        # print(self.I_value, "heri")
 
-        # print("Power:", self.V_value * self.I_value)
         return (self.V_value * self.I_value).full().flatten()[0]
 
     def predict(self, T, G):
@@ -153,5 +146,3 @@ if __name__ == "__main__":
     df = pd.read_csv("./profiles/solcast_2021-02-03_10.csv.gzip", compression="gzip")
     pred = PV.predict(df.iloc[:6].temp.values, df.iloc[:6].GHI.values)
     print(pred)
-
-    print([12, 13] + [14, 15])

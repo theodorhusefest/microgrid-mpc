@@ -165,10 +165,14 @@ class LSTM:
         Invert testset for plotting
         """
         yhat = self.model.predict(self.test_X)
-        yhat = self.invert_scaling(yhat[:, :: self.n_vars])
-        self.plot_X = self.invert_scaling(
-            self.test_X[:, :, :: self.n_vars].reshape((self.test_X.shape[0], self.n_in))
-        )
+        if self.scale:
+            yhat = self.invert_scaling(yhat[:, :: self.n_vars])
+            self.plot_X = self.invert_scaling(
+                self.test_X[:, :, :: self.n_vars].reshape((self.test_X.shape[0], self.n_in))
+            )
+        else:
+            self.plot_X = self.test_X[:, :, :: self.n_vars].reshape((self.test_X.shape[0], self.n_in))
+            yhat = yhat[:, :: self.n_vars]
         return yhat
 
     def invert_scaling(self, X):
@@ -178,6 +182,7 @@ class LSTM:
         return X * (X_max - X_min) - X_min
 
     def plot_test_set(self, yhat, num_steps, plot_every=1):
+        print(self.plot_X.shape)
         num_steps = np.min([self.plot_X.shape[0], num_steps])
         plt.figure(figsize=(20, 10))
         for step in range(num_steps):
