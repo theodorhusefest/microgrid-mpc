@@ -24,7 +24,7 @@ class LinearOCP:
         self.nb_2 = 0.913
         self.x_min = 0.3
         self.x_max = 0.9
-        self.x_ref = 0.7
+        self.x_ref = 0.9
         self.Pb_max = 1000  # Max power from battery
         self.Pg_max = 1000  # Max power from grid
         self.P_max = 950  # Wire transmission maximum
@@ -88,7 +88,7 @@ class LinearOCP:
         xdot_2 = (1 / self.C_MAX_2) * (self.nb_2 * self.PB3c - self.PB3d / self.nb_2)
         return vertcat(xdot_0, xdot_1, xdot_2)
 
-    def build_objective_function(self, e_spot):
+    def build_objective_function(self, e_spot, term_cost=0):
         """
         Builds the objective function
         """
@@ -96,9 +96,9 @@ class LinearOCP:
             self.c_b0 * (self.PB1c - self.PB1d) ** 2
             + self.c_b1 * (self.PB2c - self.PB2d) ** 2
             + self.c_b2 * (self.PB3c - self.PB3d) ** 2
-            + self.ref_cost * ((self.x_ref - self.x0) * 100) ** 2
-            + self.ref_cost * ((self.x_ref - self.x1) * 100) ** 2
-            + self.ref_cost * ((self.x_ref - self.x2) * 100) ** 2
+            + term_cost * ((self.x_ref - self.x0) * 100) ** 2
+            + term_cost * ((self.x_ref - self.x1) * 100) ** 2
+            + term_cost * ((self.x_ref - self.x2) * 100) ** 2
             + 10 * (self.PGb + self.PGs) ** 2
             + e_spot * (self.PGb - self.PGs)
             + 1000 * self.PB1c * self.PB1d
@@ -107,7 +107,7 @@ class LinearOCP:
             + 1000 * self.PGb * self.PGs
         )
 
-    def build_integrator(self, e_spot):
+    def build_integrator(self, e_spot, term_cost=0):
         """
         Creates the integrator for the current system.
         """
@@ -115,7 +115,9 @@ class LinearOCP:
         M = 4  # RK4 steps per interval
         DT = self.T / self.N / M
         f = Function(
-            "f", [self.x, self.u], [self.ode, self.build_objective_function(e_spot)]
+            "f",
+            [self.x, self.u],
+            [self.ode, self.build_objective_function(e_spot, term_cost)],
         )
         X0 = SX.sym("X0", 3)
         U = SX.sym("U", 8)
@@ -160,8 +162,10 @@ class LinearOCP:
             lbw += [0] * self.nu
             ubw += [self.Pb_max] * 6 + [self.Pg_max] * 2
             w0 += [0] * self.nu
-
-            F = self.build_integrator(self.E[k])
+            if k == self.N - 1:
+                F = self.build_integrator(self.E[k], term_cost=10e3)
+            else:
+                F = self.build_integrator(self.E[k])
             Fk = F(x0=Xk, p=Uk)
             Xk_end = Fk["xf"]
             J = J + Fk["qf"]
@@ -192,7 +196,7 @@ class LinearOCP:
                 Xk_end[2] - Xk[2],
                 self.wt[k] + self.pv[k] + Uk[6] - Uk[7] - Tk[0],
                 Tk[0] + Tk[1] - Tk[2],
-                Uk[0] - Uk[1] + Uk[2] - Uk[3] + Uk[4] - Uk[5] - Tk[1],
+                -Uk[0] + Uk[1] - Uk[2] + Uk[3] - Uk[4] + Uk[5] - Tk[1],
                 Tk[2] - self.l0[k] - self.l1[k],
             ]
             g += eq_constraints
