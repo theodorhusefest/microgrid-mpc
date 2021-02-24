@@ -90,8 +90,8 @@ def main():
 
         wt_ref = wt.get_power(2 * np.ones(N))  # + np.random.normal(1, 0.1, N))
         pv_ref = pv_true
-        l1_ref = l1.get_scaled_mean(l1_true[1], step)
-        l2_ref = l2.get_scaled_mean(l2_true[1], step)
+        l1_ref = l1.scaled_mean_pred(l1_true[1], step)
+        l2_ref = l2.scaled_mean_pred(l2_true[1], step)
         E_ref = E[step : step + N]
 
         wt_measured.append(wt_ref[0])

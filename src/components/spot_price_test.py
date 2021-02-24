@@ -1,7 +1,12 @@
 import numpy as np
+from nordpool import elspot, elbas
+from pprint import pprint
 
 
 def get_spot_price_test():
+    prices_spot = elspot.Prices(currency="NOK")
+    pprint(prices_spot.hourly(areas=["NO"]))
+
     prices = np.asarray(
         [
             0.447,
@@ -31,3 +36,6 @@ def get_spot_price_test():
         ]
     )
     return np.repeat(prices, 6)
+
+
+get_spot_price_test()

@@ -41,14 +41,14 @@ class Load:
         """
         return self.mean[step : step + self.N]
 
-    def get_scaled_mean(self, measurement, step):
+    def scaled_mean_pred(self, measurement, step):
         """
         Returns the mean for the next N steps, scaled to current measurement
         """
         pred = (measurement / self.mean[step]) * self.mean[step : step + self.N + 1][1:]
         return pred
 
-    def get_constant_pred(self, measurement, step):
+    def constant_pred(self, measurement, step):
         """
         Returns the current measurement as prediction for N
         """
