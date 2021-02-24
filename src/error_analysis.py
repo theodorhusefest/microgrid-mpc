@@ -4,19 +4,18 @@ import matplotlib.pyplot as plt
 import seaborn as sn
 
 from components.loads import Load
+from statsmodels.stats.diagnostic import lilliefors
 
 
 def load_analysis(data, L, method, plot=True):
-
-    # if method not in ["scaled_mean", "constant"]:
-    #    raise ValueError("Prediction method does not exist.")
-
     daily_errors = []
+    print("*" * 100)
     print(
         "Started load analysis with N={}, signal = {}, method = {}".format(
-            L.N, L.column, method
+            L.N, L.column, method.__name__
         )
     )
+    print("*" * 100 + "\n")
     for day, day_df in data.groupby(data.date.dt.day):
         daily_errors.append(calculate_daily_error(L, day_df[L.column], method))
 
@@ -28,16 +27,35 @@ def load_analysis(data, L, method, plot=True):
         error_df[step + 1] = step_err
 
     if plot:
-
         print("****** Statistics ******")
         print(error_df.describe())
+        print("\n" + "*" * 30 + " Lilliefors " + "*" * 30)
+        print(
+            "Lilliefors test-statistic:",
+            lilliefors(daily_errors.flatten(), dist="norm")[1],
+        )
         estimate_rmse(error_df)
-        error_df.plot.box(figsize=(10, 5))
-        plot_daily_errors(daily_errors)
-        plot_error_hist(daily_errors)
+        plot_predictions(L, method)
+        plot_boxplot(error_df, method.__name__)
+        plot_daily_errors(daily_errors, method.__name__)
+        plot_error_hist(daily_errors, method.__name__)
         plt.show()
 
     return error_df
+
+
+def plot_predictions(L, method):
+    plt.figure(figsize=(10, 5))
+    for step in range(L.mean.shape[0] - L.N):
+        plt.plot(
+            range(step + 1, step + L.N + 1),
+            method(L.get_groundtruth(step)[0], step),
+            color="red",
+        )
+    plt.plot(range(L.true.shape[0]), L.true, color="blue")
+    plt.title("{} - Predictions vs groundtruth".format(method.__name__))
+    plt.xlabel("Timestep")
+    plt.ylabel("Power [kW]")
 
 
 def estimate_rmse(error_df):
@@ -58,29 +76,37 @@ def calculate_daily_error(L, groundtruth, method):
     for step in range(groundtruth.shape[0] - L.N):
         gt = groundtruth.iloc[step : step + L.N + 1].values
         pred = method(gt[0], step)
-        errors.append((pred - gt[1:]))
+        errors.append((pred - gt[1:]) / gt[1])
     return np.asarray(errors)
 
 
-def plot_error_hist(errors):
-    plt.figure(figsize=(20, 10))
+def plot_boxplot(df, name):
+    ax = df.plot.box(figsize=(10, 5))
+    ax.set_xlabel("Prediction step")
+    ax.set_ylabel("Error")
+    ax.set_title("{} - Error at Prediction Step".format(name))
+
+
+def plot_error_hist(errors, name):
+    plt.figure(figsize=(10, 5))
     plt.hist(errors.flatten(), bins=100)
+    plt.title("{} - Error distribution".format(name))
 
 
-def plot_daily_errors(daily_errors):
+def plot_daily_errors(daily_errors, name):
     daily_mean = daily_errors.mean(axis=0)
     plt.figure(figsize=(10, 5))
     for i in range(daily_mean.shape[0]):
         plt.scatter(range(i, i + daily_mean.shape[1]), daily_mean[i])
-    plt.title("Average prediction errors at timestep")
+    plt.title("{} - Average prediction errors at timestep".format(name))
     plt.xlabel("Timestep")
     plt.ylabel("Error")
 
 
 if __name__ == "__main__":
     N = 12
-    L = Load(N, "./data/loads_train.csv", "L1")
+    L = Load(N, "./data/loads_train.csv", "L2", groundtruth="./data/load_PV3.csv")
     test_data = pd.read_csv("./data/data_oct20.csv", parse_dates=["date"]).iloc[::10]
 
-    load_analysis(test_data, L, L.get_scaled_mean)
-    load_analysis(test_data, L, L.get_constant_pred)
+    load_analysis(test_data, L, L.scaled_mean_pred)
+    # load_analysis(test_data, L, L.constant_pred)
