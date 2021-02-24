@@ -50,5 +50,10 @@ class Battery:
         self.x_opt.append(x)
         self.x_sim.append(self.xk_sim)
 
+    def set_x(self, x):
+        self.xk_sim = x
+        self.x_opt.append(x)
+        self.x_sim.append(x)
+
     def get_SOC(self):
         return self.xk_sim

@@ -1,5 +1,5 @@
 simulation_horizon: 24 # hours
-prediction_horizon: 6 # hours
+prediction_horizon: 2 # hours
 actions_per_hour: 6
 logpath: "./logs/"
 datafile: "./data/load_PV3.csv"
@@ -7,16 +7,21 @@ loads_trainfile: "./data/loads_train.csv"
 predictions: data #  perfect, data, constant, arima, scaled_mean, best
 plot_predictions: False
 
-components:
-  B1:
-    x_inital: 0.7
-    nb: 0.913
-    C_MAX: 300
-  B2:
-    x_inital: 0.7
-    nb: 0.913
-    C_MAX: 300
-  B3:
-    x_inital: 0.7
-    nb: 0.913
-    C_MAX: 300
+battery:
+  x_inital: 0.7
+  C_MAX: 1000
+  nb: 0.913724
+
+system:
+  C_MAX: 1000
+  nb_c: 0.913724
+  nb_d: 0.913724
+  x_min: 0.3
+  x_max: 0.9
+  x_ref: 0.7
+  Pb_max: 1000
+  Pg_max: 1000
+  battery_cost: 0.128
+  grid_cost: 10
+  ref_cost: 10
+  verbose: False
