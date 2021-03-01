@@ -30,7 +30,8 @@ def main():
         foldername = input("Enter logfolder name? (enter to skip) ")
         logpath = utils.create_logs_folder(conf["logpath"], foldername)
 
-    openloop = True
+    openloop = conf["openloop"]
+    perfect_predictions = conf["perfect_predictions"]
 
     actions_per_hour = conf["actions_per_hour"]
     horizon = conf["simulation_horizon"]
@@ -44,63 +45,110 @@ def main():
 
     pv, pv_pred, l1, l1_pred, l2, l2_pred, grid_buy = utils.load_data()
 
-    l1 = Load(N, loads_trainfile, "L1", groundtruth=datafile)
-    l2 = Load(N, loads_trainfile, "L2", groundtruth=datafile)
+    l1 = Load(N, loads_trainfile, "L1", groundtruth=l1)
+    l2 = Load(N, loads_trainfile, "L2", groundtruth=l2)
     E = np.ones(144) * 1  # get_spot_price()
     B = Battery(T, N, **conf["battery"])
+
+    Pbc = []
+    Pbd = []
+    Pgs = []
+    Pgb = []
 
     pv_measured = []
     l1_measured = []
     l2_measured = []
 
-    nom_MPC = NominelMPC(T, N)
+    nominal_ocp = NominelMPC(T, N)
     sys_metrics = metrics.SystemMetrics()
 
-    x, lbx, ubx, lbg, ubg = nom_MPC.build_nlp()
+    x, lbx, ubx, lbg, ubg = nominal_ocp.build_nlp()
 
     for step in range(simulation_horizon - N):
-        # Update NLP parameters
-        x["states", 0, "SOC"] = B.get_SOC()
-        lbx["states", 0, "SOC"] = B.get_SOC()
-        ubx["states", 0, "SOC"] = B.get_SOC()
 
-        pv_true = pv[step : step + N]
-        l1_true = l1.get_groundtruth(step)
-        l2_true = l2.get_groundtruth(step)
+        # Get measurements
+        x["states", 0, "SOC"] = B.get_SOC(openloop)
+        lbx["states", 0, "SOC"] = B.get_SOC(openloop)
+        ubx["states", 0, "SOC"] = B.get_SOC(openloop)
 
-        pv_ref = pv_true
-        l1_ref = l1.scaled_mean_pred(l1_true[1], step)
-        l2_ref = l2.scaled_mean_pred(l2_true[1], step)
-        E_ref = E[step : step + N]
+        pv_true = pv[step]
+        l1_true = l1.get_measurement(step)
+        l2_true = l2.get_measurement(step)
 
-        pv_measured.append(pv_true[0])
-        l1_measured.append(l1_true[0])
-        l2_measured.append(l2_true[0])
+        pv_measured.append(pv_true)
+        l1_measured.append(l1_true)
+        l2_measured.append(l2_true)
 
-        data_struct = nom_MPC.update_forecasts(pv_ref, l1_ref, l2_ref, E_ref)
+        # Create predictions for next period
+        if perfect_predictions:
+            pv_ref = pv[step + 1 : step + N + 1]
+            l1_ref = l1.perfect_pred(step)
+            l2_ref = l2.perfect_pred(step)
+            E_ref = E[step : step + N]
+        else:
+            pv_ref = pv_pred[step + 1 : step + N + 1]
+            l1_ref = l1.constant_pred(l1_true, step)
+            l2_ref = l2.constant_pred(l2_true, step)
+            E_ref = E[step : step + N]
 
-        xk_opt, Uk_opt = nom_MPC.solve_nlp([x, lbx, ubx, lbg, ubg], data_struct)
-        B.set_x(xk_opt[1])
+        data_struct = nominal_ocp.update_forecasts(pv_ref, l1_ref, l2_ref, E_ref)
 
-        # B.simulate_SOC(xk_opt[0][0], [uk[0], uk[1]])
+        xk_opt, Uk_opt = nominal_ocp.solve_nlp([x, lbx, ubx, lbg, ubg], data_struct)
 
-        # sys_metrics.update_metrics([u0[step], u1[step], u2[step], u3[step]], E[step])
+        # Simulate the systme after disturbances
+        uk = utils.calculate_real_u(
+            xk_opt,
+            Uk_opt,
+            pv[step + 1],
+            l1.get_measurement(step + 1) + l2.get_measurement(step + 1),
+        )
 
-        utils.print_status(step, [B.get_SOC()], step_time, every=50)
+        Pbc.append(uk[0])
+        Pbd.append(uk[1])
+        Pgb.append(uk[2])
+        Pgs.append(uk[3])
+
+        B.simulate_SOC(xk_opt, [uk[0], uk[1]])
+
+        sys_metrics.update_metrics(
+            [Pbc[step], Pbd[step], Pgb[step], Pgs[step]], E[step]
+        )
+
+        utils.print_status(step, [B.get_SOC(openloop)], step_time, every=50)
         step_time = time.time()
 
-    # sys_metrics.print_metrics()
+    sys_metrics.print_metrics()
 
     # Plotting
-    u = np.asarray([nom_MPC.Pbc - nom_MPC.Pbd, nom_MPC.Pgb - nom_MPC.Pgs])
-    p.plot_control_actions(
-        u, horizon - T, actions_per_hour, logpath, legends=["Battery", "Grid"]
+    u = np.asarray(
+        [np.asarray(Pbc) - np.asarray(Pbd), np.asarray(Pgb) - np.asarray(Pgs)]
     )
+    if openloop:
+        p.plot_control_actions(
+            np.asarray(
+                [nominal_ocp.Pbc - nominal_ocp.Pbd, nominal_ocp.Pgb - nominal_ocp.Pgb]
+            ),
+            horizon - T,
+            actions_per_hour,
+            logpath,
+            legends=["Battery", "Grid"],
+            title="Optimal Control Actions",
+        )
+
+    else:
+        p.plot_control_actions(
+            u,
+            horizon - T,
+            actions_per_hour,
+            logpath,
+            legends=["Battery", "Grid"],
+            title="Simulated Control Actions",
+        )
 
     p.plot_data(
-        np.asarray([B.x_sim]),
+        np.asarray([B.x_sim, B.x_opt]),
         title="State of charge",
-        legends=["SOC0"],
+        legends=["SOC", "SOC_opt"],
     )
 
     p.plot_data(np.asarray([pv_measured]), title="PV", legends=["PV"])

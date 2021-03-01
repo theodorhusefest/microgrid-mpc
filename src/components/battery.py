@@ -5,10 +5,10 @@ from casadi import SX, Function, vertcat
 
 
 class Battery:
-    def __init__(self, T, N, x_inital, nb, C_MAX):
+    def __init__(self, T, N, x_initial, nb, C_MAX):
 
-        self.xk_sim = x_inital
-        self.xk_opt = x_inital
+        self.xk_sim = x_initial
+        self.xk_opt = x_initial
         self.nb = nb
         self.C_MAX = C_MAX
 
@@ -21,8 +21,8 @@ class Battery:
         self.ode = (1 / self.C_MAX) * (self.nb * self.u[0] - self.u[1] / self.nb)
         self.F = self.create_integrator()
 
-        self.x_opt = [x_inital]
-        self.x_sim = [x_inital]
+        self.x_opt = [x_initial]
+        self.x_sim = [x_initial]
 
     def create_integrator(self):
 
@@ -48,12 +48,11 @@ class Battery:
         self.xk_sim = Fk["xf"].full().flatten()[0]
 
         self.x_opt.append(x)
+        self.xk_opt = x
         self.x_sim.append(self.xk_sim)
 
-    def set_x(self, x):
-        self.xk_sim = x
-        self.x_opt.append(x)
-        self.x_sim.append(x)
-
-    def get_SOC(self):
-        return self.xk_sim
+    def get_SOC(self, openloop):
+        if openloop:
+            return self.xk_opt
+        else:
+            return self.xk_sim

@@ -19,6 +19,8 @@ class Load:
             self.true = self.groundtruth[column].values
         elif isinstance(groundtruth, str):
             self.true = pd.read_csv(self.groundtruth)[self.column].values
+        elif isinstance(groundtruth, np.ndarray):
+            self.true = self.groundtruth
 
     def get_mean_day(self):
         """
@@ -54,11 +56,19 @@ class Load:
         """
         return measurement * np.ones(self.N)
 
-    def get_groundtruth(self, step):
+    def perfect_pred(self, step):
+
+        """
+        Returns the groundtruth for k+1 to N
+        """
+
+        return self.true[step : step + self.N + 1][1:]
+
+    def get_measurement(self, step):
         if self.groundtruth is None:
             raise ValueError("Groundtruth not provided")
 
-        return self.true[step : step + self.N]
+        return self.true[step]
 
 
 if __name__ == "__main__":

@@ -4,18 +4,19 @@ actions_per_hour: 6
 logpath: "./logs/"
 datafile: "./data/load_PV3.csv"
 loads_trainfile: "./data/loads_train.csv"
-predictions: data #  perfect, data, constant, arima, scaled_mean, best
+openloop: False
+perfect_predictions: False
 plot_predictions: False
 
 battery:
-  x_inital: 0.7
+  x_initial: 0.7
   C_MAX: 1000
   nb: 0.913724
 
 system:
   C_MAX: 1000
   nb_c: 0.913724
-  nb_d: 0.92
+  nb_d: 0.913724
   x_min: 0.3
   x_max: 0.9
   x_ref: 0.7

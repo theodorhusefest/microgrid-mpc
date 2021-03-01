@@ -103,7 +103,48 @@ def check_constrain_satisfaction(u0, u1, u2, u3, pv, l):
         raise ValueError
 
 
-def calculate_real_u(Uk, Tk, wt, pv, l1, l2):
+def is_zero(x):
+    return np.around(x) == 0
+
+
+def calculate_real_u(x, u, pv, l):
+    """
+    Calculates the real inputs based on topology contraint
+    """
+    e = -u[0] + u[1] + u[2] - u[3] + pv - l
+    if is_zero(e):
+        return u
+
+    if e > 0:  # Suplus of energy
+        # Can either charge or sell.
+        if np.around(u[0]) != 0 and np.around(u[1]) == 0:
+            u[0] += e
+        elif np.around(u[3]) != 0 and np.around(u[2]) == 0:
+            u[3] += e
+        elif np.around(u[1]) != 0 and u[1] > e:
+            u[1] -= e  # Discharge less
+        elif u[2] > e:
+            u[2] -= e  # Buy less
+        else:
+            u[2] = 0  # Stop buying
+            u[3] += e  # Start selling
+    else:  # Need more energy
+        # Can discharge or buy
+
+        if np.around(u[1]) != 0 and np.around(u[0]) == 0:
+            u[1] -= e
+        elif np.around(u[2]) != 0 and np.around(u[3]) == 0:
+            u[2] -= e
+        elif np.around(u[0]) != 0 and u[0] > np.abs(e):
+            u[0] += e  # Charge less
+        else:
+            u[3] = 0  # Stop selling
+            u[2] -= e  # Buy more"""
+
+    return u
+
+
+def calculate_real_u_top(Uk, Tk, wt, pv, l1, l2):
 
     gen_error = np.around(wt + pv + Uk[6] - Uk[7] - Tk[0], 2)
     L_error = np.around(Tk[2] - l1 - l2, 2)

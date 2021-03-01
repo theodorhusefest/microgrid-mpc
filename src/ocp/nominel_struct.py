@@ -60,6 +60,18 @@ class NominelMPC:
         self.Pgs = np.asarray([])
         self.Pgb = np.asarray([])
 
+    def get_SOC_opt(self):
+        """
+        Returns the last updated SOC
+        """
+        return self.SOC[-1]
+
+    def get_u_opt(self):
+        """
+        Returns the last calculated optimal U
+        """
+        return np.asarray([self.Pbc[-1], self.Pbd[-1], self.Pgb[-1], self.Pgs[-1]])
+
     def build_ode(self):
         """
         Returns the objective function.
@@ -70,7 +82,7 @@ class NominelMPC:
 
     def update_forecasts(self, pv, l1, l2, E):
         """
-        Fills datastruct the relevant data
+        Creates datastruct with relevant data
         """
 
         data_struct = self.all_data(0)
@@ -115,22 +127,22 @@ class NominelMPC:
             k4, k4_q = f(X + DT * k3, U)
             X = X + DT / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
             Q = Q + DT / 6 * (k1_q + 2 * k2_q + 2 * k3_q + k4_q)
-        self.F = Function("F", [X0, U], [X, Q], ["x0", "p"], ["xf", "qf"])
+        return Function("F", [X0, U], [X, Q], ["x0", "p"], ["xf", "qf"])
 
     def build_nlp(self):
 
         J = 0
 
         lbw = self.w(0)
-        ubw = self.w(inf)
+        ubw = self.w(0)
         lbw["states", :, "SOC"] = self.x_min
         ubw["states", :, "SOC"] = self.x_max
         ubw["inputs", :, "Pbc"] = self.Pb_max
         ubw["inputs", :, "Pbd"] = self.Pb_max
         ubw["inputs", :, "Pgs"] = self.Pg_max
         ubw["inputs", :, "Pgb"] = self.Pg_max
-        w0 = self.w(0)
 
+        w0 = self.w(0)
         g = []
         lbg = []
         ubg = []
@@ -144,7 +156,7 @@ class NominelMPC:
             data_k = self.all_data["data", k]
 
             # System dynamics
-            Fk = self.F(x0=states_k, p=inputs_k)
+            Fk = F(x0=states_k, p=inputs_k)
             Xk_end = Fk["xf"]
             J += Fk["qf"]
             # Stage costs
@@ -184,7 +196,7 @@ class NominelMPC:
 
         return [w0, lbw, ubw, ubg, lbg]
 
-    def solve_nlp(self, params, data_struct):
+    def solve_nlp(self, params, data):
         # Solve the NLP
         sol = self.solver(
             x0=params[0],
@@ -192,15 +204,10 @@ class NominelMPC:
             ubx=params[2],
             lbg=params[3],
             ubg=params[4],
-            p=data_struct,
+            p=data,
         )
         w_opt = sol["x"].full().flatten()
-        # J_opt = sol["f"].full().flatten()[0]
-
         w_opt = self.w(w_opt)
-
-        x_opt = w_opt["states", :, "SOC"]
-        u_opt = w_opt["inputs"]
 
         self.SOC = np.append(self.SOC, w_opt["states", 1, "SOC"])
         self.Pbc = np.append(self.Pbc, w_opt["inputs", 0, "Pbc"])
@@ -208,7 +215,7 @@ class NominelMPC:
         self.Pgb = np.append(self.Pgb, w_opt["inputs", 0, "Pgb"])
         self.Pgs = np.append(self.Pgs, w_opt["inputs", 0, "Pgs"])
 
-        return x_opt, u_opt
+        return self.get_SOC_opt(), self.get_u_opt()
 
 
 if __name__ == "__main__":
