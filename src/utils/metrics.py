@@ -10,8 +10,11 @@ class SystemMetrics:
 
         self.grid_cost = 0
         self.battery_cost = 0
-        self.wt_rmse = 0
+        self.grid_max = 0
         self.pv_rmse = 0
+        self.dependency_rate = 0
+
+        self.steps = 0
 
     def update_grid_cost(self, bought, sold, spot_price):
         """
@@ -28,28 +31,29 @@ class SystemMetrics:
             self.battery_deg * (charge + discharge) / self.actions_per_hour
         )
 
-    def self_consumption_rate(self):
+    def self_consumption_rate(self, pv, l):
         """
         Amount of energy produced by the RES system to cover the load
         """
-        pass
+        self.consumption_rate = np.mean(pv / l)
 
-    def self_dependency_rate(self):
+    def self_dependency_rate(self, l, Pgb):
         """
         Relative amount of consumed power provided directly from PV-system
         or from PV after stored in battery
         """
-        pass
+        self.dependency_rate = 1 - (np.sum(Pgb) / np.sum(l))
 
     def update_metrics(self, U, spot_price):
         """
         Updates all metrics
         """
 
-        self.grid_cost += spot_price * U[3] / self.actions_per_hour
+        self.grid_cost += spot_price * (U[2] - U[3]) / self.actions_per_hour
         self.battery_cost += (
-            self.battery_deg * (np.sum(np.abs([U[0:3]]))) / self.actions_per_hour
+            self.battery_deg * (np.sum(np.abs([U[0:1]]))) / self.actions_per_hour
         )
+        self.grid_max = np.max([self.grid_max, U[2]])
 
     def print_metrics(self):
         """
@@ -60,6 +64,15 @@ class SystemMetrics:
         print("-" * 100)
         print("Grid Cost: {}".format(self.grid_cost))
         print("Battery Cost: {}".format(self.battery_cost))
+        print("Max drawn from grid: {}".format(self.grid_max))
+        print(
+            "Self Dependency rate: {}%".format(np.around(self.dependency_rate * 100, 1))
+        )
+        print(
+            "Self Consumption rate: {}%".format(
+                np.around(self.consumption_rate * 100, 1)
+            )
+        )
         print("-" * 100)
 
 

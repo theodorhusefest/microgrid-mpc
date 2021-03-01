@@ -86,16 +86,16 @@ def main():
             l2_ref = l2.perfect_pred(step)
             E_ref = E[step : step + N]
         else:
-            pv_ref = pv_pred[step + 1 : step + N + 1]
-            l1_ref = l1.constant_pred(l1_true, step)
-            l2_ref = l2.constant_pred(l2_true, step)
+            pv_ref = pv_pred[step + 1 : step + N + 1] * 0.75
+            l1_ref = l1.scaled_mean_pred(l1_true, step)
+            l2_ref = l2.scaled_mean_pred(l2_true, step)
             E_ref = E[step : step + N]
 
-        data_struct = nominal_ocp.update_forecasts(pv_ref, l1_ref, l2_ref, E_ref)
+        forecasts = nominal_ocp.update_forecasts(pv_ref, l1_ref, l2_ref, E_ref)
 
-        xk_opt, Uk_opt = nominal_ocp.solve_nlp([x, lbx, ubx, lbg, ubg], data_struct)
+        xk_opt, Uk_opt = nominal_ocp.solve_nlp([x, lbx, ubx, lbg, ubg], forecasts)
 
-        # Simulate the systme after disturbances
+        # Simulate the system after disturbances
         uk = utils.calculate_real_u(
             xk_opt,
             Uk_opt,
@@ -117,6 +117,8 @@ def main():
         utils.print_status(step, [B.get_SOC(openloop)], step_time, every=50)
         step_time = time.time()
 
+    sys_metrics.self_dependency_rate(l1.true + l2.true, Pgb)
+    sys_metrics.self_consumption_rate(pv, l1.true + l2.true)
     sys_metrics.print_metrics()
 
     # Plotting

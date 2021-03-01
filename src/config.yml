@@ -6,10 +6,9 @@ datafile: "./data/load_PV3.csv"
 loads_trainfile: "./data/loads_train.csv"
 openloop: False
 perfect_predictions: False
-plot_predictions: False
 
 battery:
-  x_initial: 0.7
+  x_initial: 0.3
   C_MAX: 1000
   nb: 0.913724
 
