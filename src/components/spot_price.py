@@ -12,7 +12,7 @@ def get_spot_price():
         # print(item["end"].strftime("%d.%m.%Y-%H"))
         prices.append(item["value"])
 
-    return np.repeat(prices, 6)
+    return prices
 
 
 if __name__ == "__main__":

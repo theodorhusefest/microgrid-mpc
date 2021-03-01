@@ -7,8 +7,10 @@ import utils.plots as p
 import utils.metrics as metrics
 import utils.helpers as utils
 
+from pprint import pprint
+
 from components.spot_price import get_spot_price
-from ocp.nominel import NominelMPC
+from ocp.nominel_struct import NominelMPC
 from components.loads import Load
 from components.battery import Battery
 
@@ -44,28 +46,23 @@ def main():
 
     l1 = Load(N, loads_trainfile, "L1", groundtruth=datafile)
     l2 = Load(N, loads_trainfile, "L2", groundtruth=datafile)
-    E = get_spot_price()
+    E = np.ones(144) * 1  # get_spot_price()
     B = Battery(T, N, **conf["battery"])
-
-    u0 = np.asarray([])
-    u1 = np.asarray([])
-    u2 = np.asarray([])
-    u3 = np.asarray([])
 
     pv_measured = []
     l1_measured = []
     l2_measured = []
 
-    solver = NominelMPC(T, N)
+    nom_MPC = NominelMPC(T, N)
     sys_metrics = metrics.SystemMetrics()
 
-    x, lbx, ubx, lbg, ubg = solver.build_nlp()
+    x, lbx, ubx, lbg, ubg = nom_MPC.build_nlp()
 
     for step in range(simulation_horizon - N):
         # Update NLP parameters
-        x[0] = B.get_SOC()
-        lbx[0] = B.get_SOC()
-        ubx[0] = B.get_SOC()
+        x["states", 0, "SOC"] = B.get_SOC()
+        lbx["states", 0, "SOC"] = B.get_SOC()
+        ubx["states", 0, "SOC"] = B.get_SOC()
 
         pv_true = pv[step : step + N]
         l1_true = l1.get_groundtruth(step)
@@ -80,21 +77,12 @@ def main():
         l1_measured.append(l1_true[0])
         l2_measured.append(l2_true[0])
 
-        xk_opt, Uk_opt = solver.solve_nlp(
-            [x, lbx, ubx, lbg, ubg], vertcat(pv_ref, l1_ref, l2_ref, E_ref)
-        )
-        uk = [u[0] for u in Uk_opt]
+        data_struct = nom_MPC.update_forecasts(pv_ref, l1_ref, l2_ref, E_ref)
+
+        xk_opt, Uk_opt = nom_MPC.solve_nlp([x, lbx, ubx, lbg, ubg], data_struct)
         B.set_x(xk_opt[1])
-        # Uk_sim, Tk_sim = utils.calculate_real_u(
-        #    uk, Tk, wt_true[0], pv_true[0], l1_true[0], l2_true[0]
-        # )
 
         # B.simulate_SOC(xk_opt[0][0], [uk[0], uk[1]])
-
-        u0 = np.append(u0, uk[0])
-        u1 = np.append(u1, uk[1])
-        u2 = np.append(u2, uk[2])
-        u3 = np.append(u3, uk[3])
 
         # sys_metrics.update_metrics([u0[step], u1[step], u2[step], u3[step]], E[step])
 
@@ -104,7 +92,7 @@ def main():
     # sys_metrics.print_metrics()
 
     # Plotting
-    u = np.asarray([u0 - u1, u2 - u3])
+    u = np.asarray([nom_MPC.Pbc - nom_MPC.Pbd, nom_MPC.Pgb - nom_MPC.Pgs])
     p.plot_control_actions(
         u, horizon - T, actions_per_hour, logpath, legends=["Battery", "Grid"]
     )
