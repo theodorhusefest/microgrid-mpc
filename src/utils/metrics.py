@@ -12,7 +12,8 @@ class SystemMetrics:
         self.battery_cost = 0
         self.grid_max = 0
         self.pv_rmse = 0
-        self.dependency_rate = 0
+        self.dependency_rate = -1
+        self.consumption_rate = -1
 
         self.steps = 0
 
@@ -31,18 +32,18 @@ class SystemMetrics:
             self.battery_deg * (charge + discharge) / self.actions_per_hour
         )
 
-    def self_consumption_rate(self, pv, l):
+    def calculate_consumption_rate(self, Pgs, pv):
         """
         Amount of energy produced by the RES system to cover the load
         """
-        self.consumption_rate = np.mean(pv / l)
+        self.consumption_rate = 1 - (np.sum(Pgs) / np.sum(pv[0 : len(Pgs)]))
 
-    def self_dependency_rate(self, l, Pgb):
+    def calculate_dependency_rate(self, Pgb, l):
         """
         Relative amount of consumed power provided directly from PV-system
         or from PV after stored in battery
         """
-        self.dependency_rate = 1 - (np.sum(Pgb) / np.sum(l))
+        self.dependency_rate = 1 - (np.sum(Pgb) / np.sum(l[0 : len(Pgb)]))
 
     def update_metrics(self, U, spot_price):
         """

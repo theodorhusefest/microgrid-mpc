@@ -86,7 +86,7 @@ def main():
             l2_ref = l2.perfect_pred(step)
             E_ref = E[step : step + N]
         else:
-            pv_ref = pv_pred[step + 1 : step + N + 1] * 0.75
+            pv_ref = pv_pred[step + 1 : step + N + 1]
             l1_ref = l1.scaled_mean_pred(l1_true, step)
             l2_ref = l2.scaled_mean_pred(l2_true, step)
             E_ref = E[step : step + N]
@@ -117,8 +117,8 @@ def main():
         utils.print_status(step, [B.get_SOC(openloop)], step_time, every=50)
         step_time = time.time()
 
-    sys_metrics.self_dependency_rate(l1.true + l2.true, Pgb)
-    sys_metrics.self_consumption_rate(pv, l1.true + l2.true)
+    sys_metrics.calculate_consumption_rate(Pgs, pv_measured)
+    sys_metrics.calculate_dependency_rate(Pgb, l1.true + l2.true)
     sys_metrics.print_metrics()
 
     # Plotting
