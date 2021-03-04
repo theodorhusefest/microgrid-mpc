@@ -9,13 +9,6 @@ from statsmodels.stats.diagnostic import lilliefors
 
 def load_analysis(data, L, method, plot=True):
     daily_errors = []
-    print("*" * 100)
-    print(
-        "Started load analysis with N={}, signal = {}, method = {}".format(
-            L.N, L.column, method.__name__
-        )
-    )
-    print("*" * 100 + "\n")
     for day, day_df in data.groupby(data.date.dt.day):
         daily_errors.append(calculate_daily_error(L, day_df[L.column], method))
 
@@ -27,6 +20,13 @@ def load_analysis(data, L, method, plot=True):
         error_df[step + 1] = step_err
 
     if plot:
+        print("*" * 100)
+        print(
+            "Started load analysis with N={}, signal = {}, method = {}".format(
+                L.N, L.column, method.__name__
+            )
+        )
+        print("*" * 100 + "\n")
         print("****** Statistics ******")
         print(error_df.describe())
         print("\n" + "*" * 30 + " Lilliefors " + "*" * 30)
