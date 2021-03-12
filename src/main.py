@@ -59,10 +59,10 @@ def main():
     l1_measured = []
     l2_measured = []
 
-    nominal_ocp = NominelMPC(T, N)
+    ocp = NominelMPC(T, N)
     sys_metrics = metrics.SystemMetrics()
 
-    x, lbx, ubx, lbg, ubg = nominal_ocp.build_nlp()
+    x, lbx, ubx, lbg, ubg = ocp.build_nlp()
 
     for step in range(simulation_horizon - N):
 
@@ -91,9 +91,9 @@ def main():
             l2_ref = l2.scaled_mean_pred(l2_true, step)
             E_ref = E[step : step + N]
 
-        forecasts = nominal_ocp.update_forecasts(pv_ref, l1_ref, l2_ref, E_ref)
+        forecasts = ocp.update_forecasts(pv_ref, l1_ref, l2_ref, E_ref)
 
-        xk_opt, Uk_opt = nominal_ocp.solve_nlp([x, lbx, ubx, lbg, ubg], forecasts)
+        xk_opt, Uk_opt = ocp.solve_nlp([x, lbx, ubx, lbg, ubg], forecasts)
 
         # Simulate the system after disturbances
         uk = utils.calculate_real_u(
@@ -125,11 +125,10 @@ def main():
     u = np.asarray(
         [np.asarray(Pbc) - np.asarray(Pbd), np.asarray(Pgb) - np.asarray(Pgs)]
     )
+    print(ocp.Pbc.shape)
     if openloop:
         p.plot_control_actions(
-            np.asarray(
-                [nominal_ocp.Pbc - nominal_ocp.Pbd, nominal_ocp.Pgb - nominal_ocp.Pgb]
-            ),
+            np.asarray([ocp.Pbc - ocp.Pbd, ocp.Pgb - ocp.Pgb]),
             horizon - T,
             actions_per_hour,
             logpath,

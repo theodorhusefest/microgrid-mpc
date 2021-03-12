@@ -1,49 +1,100 @@
+import time
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from ocp.scenario import ScenarioMPC
+from components.loads import Load
+
+from monte_carlo import get_monte_carlo_scenarios
+from scenario_tree import (
+    build_scenario_tree,
+    find_n_common_nodes,
+    Ej_j1,
+    build_E_matrix,
+    get_all_scenarios,
+)
+
+from pprint import pprint
+
+
 start = time.time()
 T = 1
-N = 18
-N_sim = 100
-N_scenarios = 12
+N = 6
+Nr = 1
+Nu = 4
+p = 20
+branch_factor = 2
 
-ocp = ScenarioMPC(T, N, N_scenarios)
 
-pv_base = np.ones(N) * 10
-l1_base = np.ones(N) * 50
+pv_base = np.ones(N + 1) * 10
+l1_base = np.ones(N + 1) * 50
 l2_base = np.ones(N) * 10
 E_base = np.ones(N) * 1
-s = ocp.scenarios(0)
 
 x_initial = 0.4
 step = 40
 
 
-data = pd.read_csv("./data/data_oct20.csv", parse_dates=["date"]).iloc[::10]
-L1 = Load(N, "./data/loads_train.csv", "L1")
-L2 = Load(N, "./data/loads_train.csv", "L2")
+leaf_nodes = build_scenario_tree(N, Nr, branch_factor, pv_base, 0.1, l1_base, 0.1)
 
-l1_measurement = L1.mean[step]
-l2_measurement = L2.mean[step]
+N_scenarios = len(leaf_nodes)
+ocp = ScenarioMPC(T, N, N_scenarios)
+s = ocp.s_data(0)
 
-l1_scenarios = get_monte_carlo_scenarios(
-    l1_measurement, step, N, N_sim, N_scenarios, L1, L1.scaled_mean_pred, data
-)
+step_time = time.time()
+print("Used {}s on building tree and ocp.".format(step_time - start))
 
-l2_scenarios = get_monte_carlo_scenarios(
-    l2_measurement, step, N, N_sim, N_scenarios, L2, L2.scaled_mean_pred, data
-)
+s0, lbs, ubs, lbg, ubg = ocp.build_scenario_ocp()
+
+pv_scenarios = get_all_scenarios(leaf_nodes, "pv")
+l_scenarios = get_all_scenarios(leaf_nodes, "l")
 
 for i in range(N_scenarios):
-    for k in range(N):
-        s["scenario" + str(i), "data", k, "pv"] = pv_base[k] + np.random.normal(
-            0, 15, 1
-        )
-        s["scenario" + str(i), "data", k, "l1"] = l1_scenarios[i][k]
-        s["scenario" + str(i), "data", k, "l1"] = l2_scenarios[i][k]
+    s0["scenario" + str(i), "states", 0, "SOC"] = x_initial
+    lbs["scenario" + str(i), "states", 0, "SOC"] = x_initial
+    ubs["scenario" + str(i), "states", 0, "SOC"] = x_initial
 
+    plt.plot(range(N + 1), pv_scenarios[i])
+
+    for k in range(N):
+        s["scenario" + str(i), "data", k, "pv"] = pv_scenarios[i][k]
+        s["scenario" + str(i), "data", k, "l"] = l_scenarios[i][k]
         s["scenario" + str(i), "data", k, "E"] = E_base[k]
 
+plt.show()
+s_opt = ocp.solver(x0=s0, lbx=lbs, ubx=ubs, lbg=lbg, ubg=ubg, p=s)
 
-SOC, Pbc, Pbd, Pgb, Pgs = ocp.solve_scenario_tree(0.4, s)
+s_opt = s_opt["x"].full().flatten()
 
+s_opt = ocp.s(s_opt)
+print("\n Used {}s.".format(time.time() - step_time))
+
+
+def plot_input(N, N_scenarios, s, input_):
+    plt.figure()
+    for i in range(N_scenarios):
+        plt.plot(
+            range(N - 1),
+            s_opt["scenario" + str(i), "inputs", :, input_],
+            label="Scenario " + str(i),
+        )
+    plt.title(input_)
+    plt.legend()
+
+
+plot_input(N, N_scenarios, s_opt, "Pbc")
+plot_input(N, N_scenarios, s_opt, "Pbd")
+plot_input(N, N_scenarios, s_opt, "Pgb")
+plot_input(N, N_scenarios, s_opt, "Pgs")
+
+
+plt.figure()
+for i in range(N_scenarios):
+    plt.plot(range(N), s_opt["scenario" + str(i), "states", :, "SOC"])
+
+plt.ylim([0, 1])
+plt.show()
+"""
 
 def plot_serie(N, N_scenarios, serie, title):
     plt.figure()
@@ -62,4 +113,5 @@ plot_serie(N - 1, N_scenarios, Pgs, "Pgs")
 plt.show()
 
 
-print("\n Used {}s.".format(time.time() - start))
+
+"""

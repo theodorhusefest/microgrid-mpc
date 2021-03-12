@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from ocp.scenario import ScenarioMPC
 from components.loads import Load
 
-from monte_carlo import get_monte_carlo_scenarios
+from scenario_tree import build_scenario_tree, get_scenarios
 
 import utils.plots as p
 import utils.metrics as metrics
@@ -44,16 +44,17 @@ def main():
 
     T = conf["prediction_horizon"]
     N = conf["prediction_horizon"] * actions_per_hour
-    N_scenarios = 6
+    Nr = 1
+    branch_factor = 3
     N_sim = 100
+    N_scenarios = branch_factor ** Nr
 
     start_time = time.time()
     step_time = start_time
 
     pv, pv_pred, l1, l1_pred, l2, l2_pred, grid_buy = utils.load_data()
 
-    l1 = Load(N, loads_trainfile, "L1", groundtruth=l1)
-    l2 = Load(N, loads_trainfile, "L2", groundtruth=l2)
+    l = Load(N, loads_trainfile, "L", groundtruth=l1 + l2)
     E = np.ones(144) * 1  # get_spot_price()
     B = Battery(T, N, **conf["battery"])
 
@@ -67,6 +68,9 @@ def main():
     l2_measured = []
 
     ocp = ScenarioMPC(T, N, N_scenarios)
+    s_data = ocp.s_data(0)
+
+    s0, lbs, ubs, lbg, ubg = ocp.build_scenario_ocp()
 
     sys_metrics = metrics.SystemMetrics()
 
@@ -74,36 +78,34 @@ def main():
 
         # Get measurements
         pv_true = pv[step]
-        l1_true = l1.get_measurement(step)
-        l2_true = l2.get_measurement(step)
+        l_true = l.get_measurement(step)
 
-        pv_measured.append(pv_true)
-        l1_measured.append(l1_true)
-        l2_measured.append(l2_true)
-
-        l1_scenarios = get_monte_carlo_scenarios(
-            l1_true, step, N, N_sim, N_scenarios, l1, l1.scaled_mean_pred, data
+        # Get predictions
+        pv_ref = pv[step : step + N + 1]
+        l_ref = l.scaled_mean_pred(l_true, step)
+        leaf_nodes = build_scenario_tree(
+            N, Nr, branch_factor, pv_ref, 0.0001, l_ref, 0.1
         )
 
-        l2_scenarios = get_monte_carlo_scenarios(
-            l2_true, step, N, N_sim, N_scenarios, l2, l2.scaled_mean_pred, data
-        )
-        s = ocp.scenarios(0)
+        pv_scenarios = get_scenarios(leaf_nodes, "pv")
+        l_scenarios = get_scenarios(leaf_nodes, "l")
+
+        # Update parameters
         for i in range(N_scenarios):
-            for k in range(N):
-                s["scenario" + str(i), "data", k, "pv"] = pv[step + k + 1]
-                s["scenario" + str(i), "data", k, "l1"] = l1_scenarios[i][k]
-                s["scenario" + str(i), "data", k, "l1"] = l2_scenarios[i][k]
-                s["scenario" + str(i), "data", k, "E"] = 1
+            s0["scenario" + str(i), "states", 0, "SOC"] = B.get_SOC(openloop)
+            lbs["scenario" + str(i), "states", 0, "SOC"] = B.get_SOC(openloop)
+            ubs["scenario" + str(i), "states", 0, "SOC"] = B.get_SOC(openloop)
 
-        xk_opt, Uk_opt = ocp.solve_scenario_tree(B.get_SOC(openloop), s)
+            for k in range(N):
+                s_data["scenario" + str(i), "data", k, "pv"] = pv_scenarios[i][k]
+                s_data["scenario" + str(i), "data", k, "l"] = l_scenarios[i][k]
+                s_data["scenario" + str(i), "data", k, "E"] = 1
+
+        xk_opt, Uk_opt = ocp.solve_nlp([s0, lbs, ubs, lbg, ubg], s_data)
 
         # Simulate the system after disturbances
         uk = utils.calculate_real_u(
-            xk_opt,
-            Uk_opt,
-            pv[step + 1],
-            l1.get_measurement(step + 1) + l2.get_measurement(step + 1),
+            xk_opt, Uk_opt, pv[step + 1], l.get_measurement(step + 1)
         )
 
         Pbc.append(uk[0])
@@ -121,18 +123,17 @@ def main():
         step_time = time.time()
 
     sys_metrics.calculate_consumption_rate(Pgs, pv_measured)
-    sys_metrics.calculate_dependency_rate(Pgb, l1.true + l2.true)
+    sys_metrics.calculate_dependency_rate(Pgb, l.true)
     sys_metrics.print_metrics()
 
     # Plotting
     u = np.asarray(
         [np.asarray(Pbc) - np.asarray(Pbd), np.asarray(Pgb) - np.asarray(Pgs)]
     )
+
     if openloop:
         p.plot_control_actions(
-            np.asarray(
-                [nominal_ocp.Pbc - nominal_ocp.Pbd, nominal_ocp.Pgb - nominal_ocp.Pgb]
-            ),
+            np.asarray([ocp.Pbc - ocp.Pbd, ocp.Pgb - ocp.Pgb]),
             horizon - T,
             actions_per_hour,
             logpath,
@@ -156,9 +157,9 @@ def main():
         legends=["SOC", "SOC_opt"],
     )
 
-    p.plot_data(np.asarray([pv_measured]), title="PV", legends=["PV"])
+    p.plot_data(np.asarray([pv]), title="PV", legends=["PV"])
 
-    p.plot_data(np.asarray([l1.true, l2.true]), title="Loads", legends=["l1", "l2"])
+    p.plot_data(np.asarray([l.true]), title="Loads", legends=["l"])
 
     p.plot_data(np.asarray([E]), title="Spot Prices", legends=["Spotprice"])
 

@@ -43,18 +43,19 @@ class ScenarioMPC:
                 entry("inputs", struct=self.inputs, repeat=self.N - 1),
             ]
         )
-        self.data = struct_symSX([entry("pv"), entry("l1"), entry("l2"), entry("E")])
+        self.data = struct_symSX([entry("pv"), entry("l"), entry("E")])
         self.all_data = struct_symSX([entry("data", struct=self.data, repeat=self.N)])
 
-        self.scenario = struct_symSX(
-            [entry("w", struct=self.w), entry("data", struct=self.data, repeat=self.N)]
-        )
+        self.scenario = struct_symSX([entry("w", struct=self.w)])
         scenarios = []
+        s_data = []
 
         for k in range(self.N_scenarios):
-            scenarios.append(entry("scenario" + str(k), struct=self.scenario))
+            scenarios.append(entry("scenario" + str(k), struct=self.w))
+            s_data.append(entry("scenario" + str(k), struct=self.all_data))
 
-        self.scenarios = struct_symSX(scenarios)
+        self.s = struct_symSX(scenarios)
+        self.s_data = struct_symSX(s_data)
 
         self.E = SX.sym("E", self.N)
 
@@ -92,7 +93,7 @@ class ScenarioMPC:
             (self.nb_c * self.inputs["Pbc"]) - self.inputs["Pbd"] / self.nb_d
         )
 
-    def update_forecasts(self, pv, l1, l2, E):
+    def update_forecasts(self, pv, l, E):
         """
         Creates datastruct with relevant data
         """
@@ -100,8 +101,7 @@ class ScenarioMPC:
         data_struct = self.all_data(0)
         for k in range(self.N):
             data_struct["data", k, "pv"] = pv[k]
-            data_struct["data", k, "l1"] = l1[k]
-            data_struct["data", k, "l2"] = l2[k]
+            data_struct["data", k, "l"] = l[k]
             data_struct["data", k, "E"] = E[k]
 
         return data_struct
@@ -112,7 +112,7 @@ class ScenarioMPC:
             self.battery_cost * (self.inputs["Pbc"] + self.inputs["Pbd"])
             + e_spot * (self.inputs["Pgb"] - self.inputs["Pgs"])
             + self.grid_cost * (self.inputs["Pgb"] + self.inputs["Pgs"]) ** 2
-            + 100 * self.inputs["Pbc"] * self.inputs["Pbd"]
+            + +100 * self.inputs["Pbc"] * self.inputs["Pbd"]
             + 100 * self.inputs["Pgb"] * self.inputs["Pgs"]
         )
 
@@ -141,102 +141,107 @@ class ScenarioMPC:
             Q = Q + DT / 6 * (k1_q + 2 * k2_q + 2 * k3_q + k4_q)
         return Function("F", [X0, U], [X, Q], ["x0", "p"], ["xf", "qf"])
 
-    def solve_scenario_tree(self, x, forecasts):
-
-        w0, lbw, ubw, ubg, lbg = self.build_single_scenario()
-        SOC = []
-        Pbc = []
-        Pbd = []
-        Pgs = []
-        Pgb = []
-        for k in range(self.N_scenarios):
-            data = self.update_forecasts(
-                forecasts["scenario" + str(k), "data", :, "pv"],
-                forecasts["scenario" + str(k), "data", :, "l1"],
-                forecasts["scenario" + str(k), "data", :, "l2"],
-                forecasts["scenario" + str(k), "data", :, "E"],
-            )
-
-            sol = self.solver(
-                x0=w0,
-                lbx=lbw,
-                ubx=ubw,
-                lbg=lbg,
-                ubg=ubg,
-                p=data,
-            )
-            w_opt = sol["x"].full().flatten()
-
-            j_opt = sol["g"].full().flatten()
-            w_opt = self.w(w_opt)
-            SOC.append(w_opt["states", :, "SOC"])
-            Pbc.append(w_opt["inputs", :, "Pbc"])
-            Pbd.append(w_opt["inputs", :, "Pbd"])
-            Pgb.append(w_opt["inputs", :, "Pgb"])
-            Pgs.append(w_opt["inputs", :, "Pgs"])
-
-        return np.asarray(SOC)[:, 1].mean(), [
-            np.asarray(Pbc)[:, 0].mean(),
-            np.asarray(Pbd)[:, 0].mean(),
-            np.asarray(Pgb)[:, 0].mean(),
-            np.asarray(Pgs)[:, 0].mean(),
-        ]
-
-    def build_single_scenario(self):
+    def build_scenario_ocp(self):
 
         J = 0
-
-        lbw = self.w(0)
-        ubw = self.w(0)
-        lbw["states", :, "SOC"] = self.x_min
-        ubw["states", :, "SOC"] = self.x_max
-        ubw["inputs", :, "Pbc"] = self.Pb_max
-        ubw["inputs", :, "Pbd"] = self.Pb_max
-        ubw["inputs", :, "Pgs"] = self.Pg_max
-        ubw["inputs", :, "Pgb"] = self.Pg_max
-
-        w0 = self.w(0)
+        s0 = self.s(0)
+        lbs = self.s(0)
+        ubs = self.s(0)
         g = []
         lbg = []
         ubg = []
 
         F = self.build_integrator(0.50)
 
-        for k in range(self.N - 1):
+        # Non-anticipativity constraints
+        for j in range(self.N_scenarios):
+            scenario = "scenario" + str(j)
+            for i in range(j + 1, self.N_scenarios):
+                subscenario = "scenario" + str(i)
+                if scenario == subscenario:
+                    continue
+                g_ant = [
+                    self.s[scenario, "inputs", 0, "Pbc"]
+                    - self.s[subscenario, "inputs", 0, "Pbc"],
+                    self.s[scenario, "inputs", 0, "Pbd"]
+                    - self.s[subscenario, "inputs", 0, "Pbd"],
+                    self.s[scenario, "inputs", 0, "Pgb"]
+                    - self.s[subscenario, "inputs", 0, "Pgb"],
+                    self.s[scenario, "inputs", 0, "Pgs"]
+                    - self.s[subscenario, "inputs", 0, "Pgs"],
+                ]
+                g += g_ant
+                lbg += [0] * len(g_ant)
+                ubg += [0] * len(g_ant)
 
-            states_k = self.w["states", k]
-            inputs_k = self.w["inputs", k]
-            data_k = self.all_data["data", k]
+        for j in range(self.N_scenarios):
+            J_scen = 0
+            scenario = "scenario" + str(j)
 
-            # System dynamics
-            Fk = F(x0=states_k, p=inputs_k)
-            Xk_end = Fk["xf"]
-            J += Fk["qf"]
-            # Stage costs
-            # J += self.battery_cost * (
-            #    self.w["inputs", k, "Pbc"] * self.w["inputs", k, "Pbd"]
-            # )
-            # J += self.all_data["data", k, "E"] * (self.w["inputs", k, "Pgb"])
-            # J += (
-            #    self.grid_cost
-            #    * (self.w["inputs", k, "Pgb"] + self.w["inputs", k, "Pgs"]) ** 2
-            # )
+            lbs[scenario, "states", :, "SOC"] = self.x_min
+            ubs[scenario, "states", :, "SOC"] = self.x_max
+            ubs[scenario, "inputs", :, "Pbc"] = self.Pb_max
+            ubs[scenario, "inputs", :, "Pbd"] = self.Pb_max
+            ubs[scenario, "inputs", :, "Pgs"] = self.Pg_max
+            ubs[scenario, "inputs", :, "Pgb"] = self.Pg_max
 
-            # Equality Contraints
-            g += [Xk_end - self.w["states", k + 1]]
-            g += [
-                -self.w["inputs", k, "Pbc"]
-                + self.w["inputs", k, "Pbd"]
-                + self.w["inputs", k, "Pgb"]
-                - self.w["inputs", k, "Pgs"]
-                + self.all_data["data", k, "pv"]
-                - self.all_data["data", k, "l1"]
-                - self.all_data["data", k, "l2"]
-            ]
-            lbg += [0] * (Xk_end.size(1) + 1)
-            ubg += [0] * (Xk_end.size(1) + 1)
+            for k in range(self.N - 1):
+                states_k = self.s[scenario, "states", k]
+                inputs_k = self.s[scenario, "inputs", k]
 
-        prob = {"f": J, "x": self.w, "g": vertcat(*g), "p": self.all_data}
+                Fk = F(x0=states_k, p=inputs_k)
+                Xk_end = Fk["xf"]
+                # J_scen += Fk["qf"]
+
+                J_scen += self.battery_cost * (
+                    self.s[scenario, "inputs", k, "Pbc"]
+                    + self.s[scenario, "inputs", k, "Pbd"]
+                )
+                J_scen += 1 * (
+                    self.s[scenario, "inputs", k, "Pgb"]
+                    - self.s[scenario, "inputs", k, "Pgs"]
+                )
+                J_scen += (
+                    self.grid_cost
+                    * (
+                        self.s[scenario, "inputs", k, "Pgb"]
+                        - self.s[scenario, "inputs", k, "Pgs"]
+                    )
+                    ** 2
+                )
+                J_scen += (
+                    100
+                    * self.s[scenario, "inputs", k, "Pbc"]
+                    * self.s[scenario, "inputs", k, "Pbd"]
+                )
+                J_scen += (
+                    100
+                    * self.s[scenario, "inputs", k, "Pgb"]
+                    * self.s[scenario, "inputs", k, "Pgs"]
+                )
+                if k > self.N - 2:
+                    J_scen += 100 * (
+                        self.s[scenario, "inputs", k]
+                        - (self.s[scenario, "inputs", np.min([k + 1])])
+                    )
+
+                eq_con = [
+                    Xk_end - self.s[scenario, "states", k + 1],
+                    -self.s[scenario, "inputs", k, "Pbc"]
+                    + self.s[scenario, "inputs", k, "Pbd"]
+                    + self.s[scenario, "inputs", k, "Pgb"]
+                    - self.s[scenario, "inputs", k, "Pgs"]
+                    + self.s_data[scenario, "data", k, "pv"]
+                    - self.s_data[scenario, "data", k, "l"],
+                ]
+                g += eq_con
+                lbg += [0] * len(eq_con)
+                ubg += [0] * len(eq_con)
+
+            weight = [1, 1, 100]
+            J += weight[j] * J_scen
+
+        prob = {"f": J, "x": self.s, "g": vertcat(*g), "p": self.s_data}
         if self.verbose:
             self.solver = nlpsol("solver", "ipopt", prob)
         else:
@@ -247,7 +252,7 @@ class ScenarioMPC:
             }
             self.solver = nlpsol("solver", "ipopt", prob, opts)
 
-        return [w0, lbw, ubw, ubg, lbg]
+        return [s0, lbs, ubs, lbg, ubg]
 
     def solve_nlp(self, params, data):
         # Solve the NLP
@@ -259,14 +264,14 @@ class ScenarioMPC:
             ubg=params[4],
             p=data,
         )
-        w_opt = sol["x"].full().flatten()
-        w_opt = self.w(w_opt)
+        s_opt = sol["x"].full().flatten()
+        s_opt = self.s(s_opt)
 
-        self.SOC = np.append(self.SOC, w_opt["states", 1, "SOC"])
-        self.Pbc = np.append(self.Pbc, w_opt["inputs", 0, "Pbc"])
-        self.Pbd = np.append(self.Pbd, w_opt["inputs", 0, "Pbd"])
-        self.Pgb = np.append(self.Pgb, w_opt["inputs", 0, "Pgb"])
-        self.Pgs = np.append(self.Pgs, w_opt["inputs", 0, "Pgs"])
+        self.SOC = np.append(self.SOC, s_opt["scenario" + str(0), "states", 1, "SOC"])
+        self.Pbc = np.append(self.Pbc, s_opt["scenario" + str(0), "inputs", 0, "Pbc"])
+        self.Pbd = np.append(self.Pbd, s_opt["scenario" + str(0), "inputs", 0, "Pbd"])
+        self.Pgb = np.append(self.Pgb, s_opt["scenario" + str(0), "inputs", 0, "Pgb"])
+        self.Pgs = np.append(self.Pgs, s_opt["scenario" + str(0), "inputs", 0, "Pgs"])
 
         return self.get_SOC_opt(), self.get_u_opt()
 

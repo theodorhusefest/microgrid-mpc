@@ -45,13 +45,18 @@ def scenario_reduction(sims, N_scenarios):
 
 
 def get_monte_carlo_scenarios(
-    measurement, step, N, N_sim, N_scenarios, component, method, test_data
+    measurement, step, N, N_sim, N_scenarios, component, method, test_data, plot=False
 ):
 
     sims = monte_carlo_simulations(
         measurement, step, N, N_sim, component, method, test_data
     )
-    return scenario_reduction(sims, N_scenarios)
+    scenarios = scenario_reduction(sims, N_scenarios)
+    if plot:
+        for k in range(N_scenarios):
+            plt.plot(range(N), scenarios[k], marker="o")
+        plt.show()
+    return scenarios
 
 
 def shuffle_dataframe(df):
@@ -78,7 +83,5 @@ if __name__ == "__main__":
     scenarios = scenario_reduction(sims, N_scenarios)
 
     plt.figure()
-    for k in range(N_scenarios):
-        plt.plot(range(N), scenarios[k], marker="o")
 
     plt.show()

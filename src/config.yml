@@ -8,7 +8,7 @@ openloop: False
 perfect_predictions: False
 
 battery:
-  x_initial: 0.9
+  x_initial: 0.35
   C_MAX: 1000
   nb: 0.913724
 
