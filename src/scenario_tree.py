@@ -11,6 +11,7 @@ class Node:
         self.id = id_
         self.level = level
         self.children = []
+        self.scenarios = []
         self.parent = None
         self.pv = np.max([pv, 0])
         self.l = np.max([l, 0])
@@ -37,9 +38,13 @@ class Node:
             return True
 
     def print_children(self):
+        print("\n************")
         print("ID:", self.id)
         print("PV:", self.pv)
         print("L:", self.l)
+        print("Level", self.level)
+        print("Scenarios:", self.scenarios)
+        print("************ \n")
         for child in self.children:
             child.print_children()
 
@@ -123,63 +128,12 @@ def get_scenarios(nodes, signal):
     return np.asarray(scenarios)
 
 
-def find_n_common_nodes(node1, node2):
-    """
-    Returns the number of common nodes for two nodes
-    """
+def add_scenario_for_parents(node, scenario):
 
-    common_nodes = 0
-    while node1.parent:
-        node1 = node1.parent
-        node2 = node2.parent
-        if node1 == node2:
-            common_nodes += 1
-
-    return common_nodes
-
-
-def Ej_j1(N, Nr, Nu, p, Nc):
-    """
-    Returns the E matrix for two concecutive scenarios
-    """
-    base = SX.eye(Nu * Nc)
-
-    zeros = SX.zeros((Nu * Nc, Nu * N - base.shape[1]))
-    E = horzcat(base, zeros)
-    return E
-
-
-def build_E_matrix(Ejs, N, Nu, Ns, p):
-    """
-    Returns the E-matrices as [E1, E_2, ..., E_N]
-    """
-    ind = 0
-    E_bar = []
-    for j in range(Ns - 1):
-        if j == 0:
-            Ej_bar = Ejs[j]
-            pad = SX.zeros((p - Ej_bar.shape[0], Nu * N))
-            Ej_bar = vertcat(Ej_bar, pad)
-
-        elif j == 1:
-            Ej_bar = -Ejs[j - 1]
-            Ej_bar = vertcat(-Ejs[j - 1], Ejs[j])
-            pad = SX.zeros((p - Ej_bar.shape[0], Nu * N))
-            Ej_bar = vertcat(Ej_bar, pad)
-        elif j >= 2:
-            pad_above = SX.zeros((ind - Ejs[j - 1].shape[0], Nu * N))
-            Ej_bar = vertcat(pad_above, -Ejs[j - 1], Ejs[j])
-            pad = SX.zeros((p - Ej_bar.shape[0], Nu * N))
-            Ej_bar = vertcat(Ej_bar, pad)
-
-        ind += Ejs[j].shape[0]
-        E_bar.append(Ej_bar)
-
-    pad_above = np.zeros((ind - Ejs[-1].shape[0], Nu * N))
-    Ej_bar = vertcat(pad_above, -Ejs[-1])
-    E_bar.append(Ej_bar)
-
-    return E_bar
+    current = node
+    while current:
+        current.scenarios.append(scenario)
+        current = current.parent
 
 
 if __name__ == "__main__":

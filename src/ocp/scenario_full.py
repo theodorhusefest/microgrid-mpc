@@ -2,9 +2,10 @@ from casadi import *
 from casadi.tools import *
 from utils.helpers import parse_config
 from pprint import pprint
+from scenario_tree import Node, add_scenario_for_parents
 
 
-class ScenarioMPC:
+class FullScenarioMPC:
     def __init__(self, T, N, N_scenarios):
 
         self.T = T
@@ -141,7 +142,35 @@ class ScenarioMPC:
             Q = Q + DT / 6 * (k1_q + 2 * k2_q + 2 * k3_q + k4_q)
         return Function("F", [X0, U], [X, Q], ["x0", "p"], ["xf", "qf"])
 
-    def build_scenario_ocp(self):
+    def add_stage_cost(self, scenario, k):
+        J_scen = 0
+        J_scen += self.battery_cost * (
+            self.s[scenario, "inputs", k, "Pbc"] + self.s[scenario, "inputs", k, "Pbd"]
+        )
+        J_scen += 1 * (
+            self.s[scenario, "inputs", k, "Pgb"] - self.s[scenario, "inputs", k, "Pgs"]
+        )
+        J_scen += (
+            self.grid_cost
+            * (
+                self.s[scenario, "inputs", k, "Pgb"]
+                - self.s[scenario, "inputs", k, "Pgs"]
+            )
+            ** 2
+        )
+        J_scen += (
+            100
+            * self.s[scenario, "inputs", k, "Pbc"]
+            * self.s[scenario, "inputs", k, "Pbd"]
+        )
+        J_scen += (
+            100
+            * self.s[scenario, "inputs", k, "Pgb"]
+            * self.s[scenario, "inputs", k, "Pgs"]
+        )
+        return J_scen
+
+    def build_scenario_ocp(self, Nr, branching):
 
         J = 0
         s0 = self.s(0)
@@ -153,6 +182,93 @@ class ScenarioMPC:
 
         F = self.build_integrator(0.50)
 
+        b_factor = np.append(
+            np.ones(Nr, dtype=int) * branching, np.ones(self.N - Nr, dtype=int)
+        )
+        b_factor = np.append(b_factor, 0)
+        root = Node(0, 0, 0, 0)
+
+        ids = 1
+        to_explore = [root]
+
+        scenario_num = 0
+
+        while to_explore:
+            current = to_explore.pop(0)
+            b = b_factor[current.level]
+
+            for j in range(b):
+                temp = Node(ids, current.level + 1, 0, 0)
+                temp.set_parent(current)
+
+                current.add_child(temp)
+                to_explore.append(temp)
+                ids += 1
+
+                if temp.is_leaf(self.N):
+                    scenario = "scenario" + str(scenario_num)
+                    scenario_num += 1
+                    add_scenario_for_parents(temp, scenario)
+
+                    lbs[scenario, "states", :, "SOC"] = self.x_min
+                    ubs[scenario, "states", :, "SOC"] = self.x_max
+                    ubs[scenario, "inputs", :, "Pbc"] = self.Pb_max
+                    ubs[scenario, "inputs", :, "Pbd"] = self.Pb_max
+                    ubs[scenario, "inputs", :, "Pgs"] = self.Pg_max
+                    ubs[scenario, "inputs", :, "Pgb"] = self.Pg_max
+
+                    J_scen = 0
+                    for k in range(self.N - 1):
+                        states_k = self.s[scenario, "states", k]
+                        inputs_k = self.s[scenario, "inputs", k]
+
+                        Fk = F(x0=states_k, p=inputs_k)
+                        Xk_end = Fk["xf"]
+                        # J_scen += Fk["qf"]
+
+                        J_scen += self.add_stage_cost(scenario, k)
+
+                        eq_con = [
+                            Xk_end - self.s[scenario, "states", k + 1],
+                            -self.s[scenario, "inputs", k, "Pbc"]
+                            + self.s[scenario, "inputs", k, "Pbd"]
+                            + self.s[scenario, "inputs", k, "Pgb"]
+                            - self.s[scenario, "inputs", k, "Pgs"]
+                            + self.s_data[scenario, "data", k, "pv"]
+                            - self.s_data[scenario, "data", k, "l"],
+                        ]
+                        g += eq_con
+                        lbg += [0] * len(eq_con)
+                        ubg += [0] * len(eq_con)
+                    J += J_scen
+
+        # Non-anticipativity constraints
+        to_explore = [root]
+        while to_explore:
+            current = to_explore.pop(0)
+            to_explore += current.children
+            k = current.level
+            for i in range(len(current.scenarios)):
+                scenario = current.scenarios[i]
+                for j in range(i + 1, len(current.scenarios)):
+                    subscenario = current.scenarios[j]
+                    g_ant = [
+                        self.s[scenario, "inputs", k, "Pbc"]
+                        - self.s[subscenario, "inputs", k, "Pbc"],
+                        self.s[scenario, "inputs", k, "Pbd"]
+                        - self.s[subscenario, "inputs", k, "Pbd"],
+                        self.s[scenario, "inputs", k, "Pgb"]
+                        - self.s[subscenario, "inputs", k, "Pgb"],
+                        self.s[scenario, "inputs", k, "Pgs"]
+                        - self.s[subscenario, "inputs", k, "Pgs"],
+                    ]
+                    g += g_ant
+                    lbg += [0] * len(g_ant)
+                    ubg += [0] * len(g_ant)
+
+                    print(current.id, current.scenarios, scenario, subscenario)
+
+        """
         # Non-anticipativity constraints
         for j in range(self.N_scenarios):
             scenario = "scenario" + str(j)
@@ -240,6 +356,8 @@ class ScenarioMPC:
 
             weight = [1, 1, 100]
             J += weight[j] * J_scen
+        
+        
 
         prob = {"f": J, "x": self.s, "g": vertcat(*g), "p": self.s_data}
         if self.verbose:
@@ -253,6 +371,9 @@ class ScenarioMPC:
             self.solver = nlpsol("solver", "ipopt", prob, opts)
 
         return [s0, lbs, ubs, lbg, ubg]
+
+        """
+        return root
 
     def solve_nlp(self, params, data):
         # Solve the NLP

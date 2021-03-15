@@ -2,25 +2,21 @@ import time
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from ocp.scenario import ScenarioMPC
+from ocp.scenario_reduced import ReducedScenarioMPC
+from ocp.scenario_full import FullScenarioMPC
 from components.loads import Load
 
 from monte_carlo import get_monte_carlo_scenarios
-from scenario_tree import (
-    build_scenario_tree,
-    find_n_common_nodes,
-    Ej_j1,
-    build_E_matrix,
-    get_all_scenarios,
-)
+from scenario_tree import build_scenario_tree
+
 
 from pprint import pprint
 
 
 start = time.time()
 T = 1
-N = 6
-Nr = 1
+N = 4
+Nr = 3
 Nu = 4
 p = 20
 branch_factor = 2
@@ -34,7 +30,13 @@ E_base = np.ones(N) * 1
 x_initial = 0.4
 step = 40
 
+ocp = FullScenarioMPC(T, N, 8)
 
+root = ocp.build_scenario_ocp(Nr, branch_factor)
+# root.print_children()
+
+
+"""
 leaf_nodes = build_scenario_tree(N, Nr, branch_factor, pv_base, 0.1, l1_base, 0.1)
 
 N_scenarios = len(leaf_nodes)
@@ -94,7 +96,7 @@ for i in range(N_scenarios):
 
 plt.ylim([0, 1])
 plt.show()
-"""
+
 
 def plot_serie(N, N_scenarios, serie, title):
     plt.figure()
@@ -111,7 +113,4 @@ plot_serie(N - 1, N_scenarios, Pgb, "Pgb")
 plot_serie(N - 1, N_scenarios, Pgs, "Pgs")
 
 plt.show()
-
-
-
 """
