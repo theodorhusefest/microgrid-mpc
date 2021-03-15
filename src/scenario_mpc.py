@@ -1,25 +1,21 @@
 import time
 import numpy as np
 import pandas as pd
+from pprint import pprint
 import matplotlib.pyplot as plt
-from ocp.scenario import ScenarioMPC
-from components.loads import Load
-
-from scenario_tree import build_scenario_tree, get_scenarios
 
 import utils.plots as p
 import utils.metrics as metrics
 import utils.helpers as utils
 
-from pprint import pprint
-
-from components.spot_price import get_spot_price
-from ocp.scenario import ScenarioMPC
 from components.loads import Load
+from ocp.scenario import ScenarioOCP
 from components.battery import Battery
+from components.spot_price import get_spot_price
+from utils.scenario_tree import build_scenario_tree, get_scenarios
 
 
-def main():
+def scenario_mpc():
     """
     Main function for mpc-scheme with receding horizion.
     """
@@ -44,8 +40,8 @@ def main():
 
     T = conf["prediction_horizon"]
     N = conf["prediction_horizon"] * actions_per_hour
-    Nr = 1
-    branch_factor = 3
+    Nr = conf["robust_horizon"]
+    branch_factor = conf["branch_factor"]
     N_sim = 100
     N_scenarios = branch_factor ** Nr
 
@@ -67,7 +63,12 @@ def main():
     l1_measured = []
     l2_measured = []
 
-    ocp = ScenarioMPC(T, N, N_scenarios)
+    # Build reference tree
+    tree, leaf_nodes = build_scenario_tree(
+        N, Nr, branch_factor, np.ones(N + 1), 0, np.ones(N + 1), 0
+    )
+
+    ocp = ScenarioOCP(T, N, N_scenarios)
     s_data = ocp.s_data(0)
 
     s0, lbs, ubs, lbg, ubg = ocp.build_scenario_ocp()
@@ -83,8 +84,8 @@ def main():
         # Get predictions
         pv_ref = pv[step : step + N + 1]
         l_ref = l.scaled_mean_pred(l_true, step)
-        leaf_nodes = build_scenario_tree(
-            N, Nr, branch_factor, pv_ref, 0.0001, l_ref, 0.1
+        root, leaf_nodes = build_scenario_tree(
+            N, Nr, branch_factor, pv_ref, 0.001, l_ref, 0.1
         )
 
         pv_scenarios = get_scenarios(leaf_nodes, "pv")
@@ -172,4 +173,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    scenario_mpc()

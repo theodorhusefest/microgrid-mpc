@@ -66,7 +66,7 @@ def build_scenario_tree(N, Nr, branching, pv_ref, pv_std, l_ref, l_std):
 
     ids = 1
     to_explore = [root]
-    nodes = [root]
+    scenario_num = 0
     leaf_nodes = []
     while to_explore:
         current = to_explore.pop(0)
@@ -100,18 +100,23 @@ def build_scenario_tree(N, Nr, branching, pv_ref, pv_std, l_ref, l_std):
             temp.set_parent(current)
             if temp.is_leaf(N):
                 leaf_nodes.append(temp)
+                scenario = "scenario" + str(scenario_num)
+                scenario_num += 1
+                add_scenario_for_parents(temp, scenario)
 
             current.add_child(temp)
             to_explore.append(temp)
 
             ids += 1
-            nodes.append(temp)
-    return leaf_nodes
+    return root, leaf_nodes
 
 
-def traverse_leaf_to_root(node, signal):
+def traverse_leaf_to_root(leaf, signal):
+    """
+    Find path from leaf to root, and returns it reversed
+    """
     scenario = []
-    current = node
+    current = leaf
     while current:
         scenario.append(current.get_value(signal))
         current = current.parent
@@ -119,35 +124,27 @@ def traverse_leaf_to_root(node, signal):
     return np.asarray(scenario[::-1])
 
 
-def get_scenarios(nodes, signal):
+def get_scenarios(leaf_nodes, signal):
+    """
+    Extracts all scenarios from leaf to root
+    """
     scenarios = []
-    for node in nodes:
+    for node in leaf_nodes:
         if node.leaf:
             scenarios.append(traverse_leaf_to_root(node, signal))
 
     return np.asarray(scenarios)
 
 
-def add_scenario_for_parents(node, scenario):
-
-    current = node
+def add_scenario_for_parents(leaf, scenario):
+    """
+    Starts from leaf, and adds scenario-label to all nodes on path to root
+    """
+    current = leaf
     while current:
         current.scenarios.append(scenario)
         current = current.parent
 
 
 if __name__ == "__main__":
-
-    N = 2
-    Nr = 2
-    Nu = 4
-    N_scenarios = 2 ** Nr
-    p = 20
-    E1_2 = Ej_j1(N, Nr, Nu, p, 2)
-    E2_3 = Ej_j1(N, Nr, Nu, p, 1)
-    E3_4 = Ej_j1(N, Nr, Nu, p, 2)
-    Ejs = [E1_2, E2_3, E3_4]
-    ind = 0
-    E_bar = build_E_matrix(Ejs, N, Nu, N_scenarios, p)
-    for E in E_bar:
-        print(E)
+    pass

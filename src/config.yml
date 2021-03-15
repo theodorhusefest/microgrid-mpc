@@ -1,5 +1,8 @@
 simulation_horizon: 24 # hours
-prediction_horizon: 2 # hours
+prediction_horizon: 3 # hours
+robust_horizon: 2 # steps
+branch_factor: 2
+
 actions_per_hour: 6
 logpath: "./logs/"
 datafile: "./data/load_PV3.csv"

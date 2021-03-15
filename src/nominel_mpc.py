@@ -10,12 +10,12 @@ import utils.helpers as utils
 from pprint import pprint
 
 from components.spot_price import get_spot_price
-from ocp.nominel_struct import NominelMPC
+from ocp.nominel import NominelMPC
 from components.loads import Load
 from components.battery import Battery
 
 
-def main():
+def nominel_mpc():
     """
     Main function for mpc-scheme with receding horizion.
     """
@@ -125,7 +125,6 @@ def main():
     u = np.asarray(
         [np.asarray(Pbc) - np.asarray(Pbd), np.asarray(Pgb) - np.asarray(Pgs)]
     )
-    print(ocp.Pbc.shape)
     if openloop:
         p.plot_control_actions(
             np.asarray([ocp.Pbc - ocp.Pbd, ocp.Pgb - ocp.Pgb]),
@@ -167,4 +166,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    nominel_mpc()

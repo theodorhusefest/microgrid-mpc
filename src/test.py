@@ -2,24 +2,20 @@ import time
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from ocp.scenario_reduced import ReducedScenarioMPC
-from ocp.scenario_full import FullScenarioMPC
-from components.loads import Load
-
-from monte_carlo import get_monte_carlo_scenarios
-from scenario_tree import build_scenario_tree
-
 
 from pprint import pprint
 
+from components.loads import Load
+from ocp.scenario import ScenarioOCP
+from monte_carlo import get_monte_carlo_scenarios
+from scenario_tree import build_scenario_tree, get_scenarios
 
 start = time.time()
 T = 1
-N = 4
+N = 30
 Nr = 3
-Nu = 4
 p = 20
-branch_factor = 2
+branch_factor = 3
 
 
 pv_base = np.ones(N + 1) * 10
@@ -30,40 +26,32 @@ E_base = np.ones(N) * 1
 x_initial = 0.4
 step = 40
 
-ocp = FullScenarioMPC(T, N, 8)
-
-root = ocp.build_scenario_ocp(Nr, branch_factor)
-# root.print_children()
-
-
-"""
-leaf_nodes = build_scenario_tree(N, Nr, branch_factor, pv_base, 0.1, l1_base, 0.1)
+root, leaf_nodes = build_scenario_tree(N, Nr, branch_factor, pv_base, 0.1, l1_base, 0.1)
 
 N_scenarios = len(leaf_nodes)
-ocp = ScenarioMPC(T, N, N_scenarios)
+ocp = ScenarioOCP(T, N, N_scenarios)
 s = ocp.s_data(0)
+s0, lbs, ubs, lbg, ubg = ocp.build_scenario_ocp(root)
 
 step_time = time.time()
 print("Used {}s on building tree and ocp.".format(step_time - start))
 
-s0, lbs, ubs, lbg, ubg = ocp.build_scenario_ocp()
 
-pv_scenarios = get_all_scenarios(leaf_nodes, "pv")
-l_scenarios = get_all_scenarios(leaf_nodes, "l")
+pv_scenarios = get_scenarios(leaf_nodes, "pv")
+l_scenarios = get_scenarios(leaf_nodes, "l")
 
 for i in range(N_scenarios):
     s0["scenario" + str(i), "states", 0, "SOC"] = x_initial
     lbs["scenario" + str(i), "states", 0, "SOC"] = x_initial
     ubs["scenario" + str(i), "states", 0, "SOC"] = x_initial
 
-    plt.plot(range(N + 1), pv_scenarios[i])
+    # plt.plot(range(N + 1), pv_scenarios[i])
 
     for k in range(N):
         s["scenario" + str(i), "data", k, "pv"] = pv_scenarios[i][k]
         s["scenario" + str(i), "data", k, "l"] = l_scenarios[i][k]
         s["scenario" + str(i), "data", k, "E"] = E_base[k]
 
-plt.show()
 s_opt = ocp.solver(x0=s0, lbx=lbs, ubx=ubs, lbg=lbg, ubg=ubg, p=s)
 
 s_opt = s_opt["x"].full().flatten()
@@ -97,7 +85,7 @@ for i in range(N_scenarios):
 plt.ylim([0, 1])
 plt.show()
 
-
+"""
 def plot_serie(N, N_scenarios, serie, title):
     plt.figure()
     for k in range(N_scenarios):

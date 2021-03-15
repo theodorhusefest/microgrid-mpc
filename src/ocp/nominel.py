@@ -1,4 +1,5 @@
 from casadi import *
+from casadi.tools import *
 from utils.helpers import parse_config
 
 
@@ -24,42 +25,83 @@ class NominelMPC:
         self.ref_cost = conf_system["ref_cost"]
         self.verbose = conf_system["verbose"]
 
-        # Define symbolic variables
-        self.x = SX.sym("x")
-        self.u0 = SX.sym("u0")
-        self.u1 = SX.sym("u1")
-        self.u2 = SX.sym("u2")
-        self.u3 = SX.sym("u3")
+        self.states = struct_symSX([entry("SOC")])
+        self.inputs = struct_symSX(
+            [
+                entry("Pbc"),
+                entry("Pbd"),
+                entry("Pgb"),
+                entry("Pgs"),
+            ]
+        )
 
-        self.u = vertcat(self.u0, self.u1, self.u2, self.u3)
+        self.w = struct_symSX(
+            [
+                entry("states", struct=self.states, repeat=self.N),
+                entry("inputs", struct=self.inputs, repeat=self.N - 1),
+            ]
+        )
+        self.data = struct_symSX([entry("pv"), entry("l1"), entry("l2"), entry("E")])
+        self.all_data = struct_symSX([entry("data", struct=self.data, repeat=self.N)])
 
-        self.pv = SX.sym("pv", self.N)
-        self.l1 = SX.sym("l1", self.N)
-        self.l2 = SX.sym("l2", self.N)
         self.E = SX.sym("E", self.N)
 
         # Initialize system properties
-        self.xdot = self.build_ode()
+        self.ode = self.build_ode()
         self.L = None
         self.F = None
         self.solver = None
 
+        # Keep optimal solutions
+
+        self.SOC = np.asarray([])
+        self.Pbc = np.asarray([])
+        self.Pbd = np.asarray([])
+        self.Pgs = np.asarray([])
+        self.Pgb = np.asarray([])
+
+    def get_SOC_opt(self):
+        """
+        Returns the last updated SOC
+        """
+        return self.SOC[-1]
+
+    def get_u_opt(self):
+        """
+        Returns the last calculated optimal U
+        """
+        return np.asarray([self.Pbc[-1], self.Pbd[-1], self.Pgb[-1], self.Pgs[-1]])
+
     def build_ode(self):
         """
         Returns the objective function.
-        Can be dynamically updated
         """
-        return (1 / self.C_MAX) * ((self.nb_c * self.u0) - (self.u1 / self.nb_d))
+        return (1 / self.C_MAX) * (
+            (self.nb_c * self.inputs["Pbc"]) - self.inputs["Pbd"] / self.nb_d
+        )
+
+    def update_forecasts(self, pv, l1, l2, E):
+        """
+        Creates datastruct with relevant data
+        """
+
+        data_struct = self.all_data(0)
+        for k in range(self.N):
+            data_struct["data", k, "pv"] = pv[k]
+            data_struct["data", k, "l1"] = l1[k]
+            data_struct["data", k, "l2"] = l2[k]
+            data_struct["data", k, "E"] = E[k]
+
+        return data_struct
 
     def build_objective_function(self, e_spot):
 
         return (
-            self.battery_cost * (self.u0 + self.u1)
-            + e_spot * (self.u2 - self.u3)
-            + self.grid_cost * (self.u2 + self.u3) ** 2
-            + self.ref_cost * ((self.x_ref - self.x) * 100) ** 2
-            + 100 * self.u0 * self.u1
-            + 100 * self.u2 * self.u3
+            self.battery_cost * (self.inputs["Pbc"] + self.inputs["Pbd"])
+            + e_spot * (self.inputs["Pgb"] - self.inputs["Pgs"])
+            + self.grid_cost * (self.inputs["Pgb"] + self.inputs["Pgs"]) ** 2
+            + 100 * self.inputs["Pbc"] * self.inputs["Pbd"]
+            + 100 * self.inputs["Pgb"] * self.inputs["Pgs"]
         )
 
     def build_integrator(self, e_spot):
@@ -70,7 +112,9 @@ class NominelMPC:
         M = 4  # RK4 steps per interval
         DT = self.T / self.N / M
         f = Function(
-            "f", [self.x, self.u], [self.xdot, self.build_objective_function(e_spot)]
+            "f",
+            [self.states, self.inputs],
+            [self.ode, self.build_objective_function(e_spot)],
         )
         X0 = SX.sym("X0")
         U = SX.sym("U", 4)
@@ -83,63 +127,63 @@ class NominelMPC:
             k4, k4_q = f(X + DT * k3, U)
             X = X + DT / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
             Q = Q + DT / 6 * (k1_q + 2 * k2_q + 2 * k3_q + k4_q)
-        self.F = Function("F", [X0, U], [X, Q], ["x0", "p"], ["xf", "qf"])
+        return Function("F", [X0, U], [X, Q], ["x0", "p"], ["xf", "qf"])
 
     def build_nlp(self):
 
-        # Start with an empty NLP
-        w = []
-        w0 = []
-        lbw = []
-        ubw = []
         J = 0
+
+        lbw = self.w(0)
+        ubw = self.w(0)
+        lbw["states", :, "SOC"] = self.x_min
+        ubw["states", :, "SOC"] = self.x_max
+        ubw["inputs", :, "Pbc"] = self.Pb_max
+        ubw["inputs", :, "Pbd"] = self.Pb_max
+        ubw["inputs", :, "Pgs"] = self.Pg_max
+        ubw["inputs", :, "Pgb"] = self.Pg_max
+
+        w0 = self.w(0)
         g = []
         lbg = []
         ubg = []
 
-        # "Lift" initial conditions
-        Xk = SX.sym("X0")
-        w += [Xk]
-        lbw += [0]
-        ubw += [0]
-        w0 += [0]
+        F = self.build_integrator(0.50)
 
-        # Formulate the NLP
-        for k in range(self.N):
-            # New NLP variable for the control
-            Uk = SX.sym("U_" + str(k), 4)
-            w += [Uk]
-            lbw += [0, 0, 0, 0]
-            ubw += [self.Pb_max, self.Pb_max, self.Pg_max, self.Pg_max]
-            w0 += [0, 0, 0, 0]
-            F = self.build_integrator(self.E[k])
-            Fk = self.F(x0=Xk, p=Uk)
+        for k in range(self.N - 1):
+
+            states_k = self.w["states", k]
+            inputs_k = self.w["inputs", k]
+            data_k = self.all_data["data", k]
+
+            # System dynamics
+            Fk = F(x0=states_k, p=inputs_k)
             Xk_end = Fk["xf"]
-            J = J + Fk["qf"]
+            J += Fk["qf"]
+            # Stage costs
+            # J += self.battery_cost * (
+            #    self.w["inputs", k, "Pbc"] * self.w["inputs", k, "Pbd"]
+            # )
+            # J += self.all_data["data", k, "E"] * (self.w["inputs", k, "Pgb"])
+            # J += (
+            #    self.grid_cost
+            #    * (self.w["inputs", k, "Pgb"] + self.w["inputs", k, "Pgs"]) ** 2
+            # )
 
-            # New NLP variable for state at end of interval
-            Xk = SX.sym("X_" + str(k + 1))
-            w += [Xk]
-
-            lbw += [self.x_min]
-            ubw += [self.x_max]
-            w0 += [0]
-
-            # Add equality constraints
+            # Equality Contraints
+            g += [Xk_end - self.w["states", k + 1]]
             g += [
-                Xk_end - Xk,
-                -Uk[0] + Uk[1] + Uk[2] - Uk[3] + self.pv[k] - self.l1[k] - self.l2[k],
+                -self.w["inputs", k, "Pbc"]
+                + self.w["inputs", k, "Pbd"]
+                + self.w["inputs", k, "Pgb"]
+                - self.w["inputs", k, "Pgs"]
+                + self.all_data["data", k, "pv"]
+                - self.all_data["data", k, "l1"]
+                - self.all_data["data", k, "l2"]
             ]
+            lbg += [0] * (Xk_end.size(1) + 1)
+            ubg += [0] * (Xk_end.size(1) + 1)
 
-            lbg += [0, 0]
-            ubg += [0, 0]
-
-        prob = {
-            "f": J,
-            "x": vertcat(*w),
-            "g": vertcat(*g),
-            "p": vertcat(self.pv, self.l1, self.l2, self.E),
-        }
+        prob = {"f": J, "x": self.w, "g": vertcat(*g), "p": self.all_data}
         if self.verbose:
             self.solver = nlpsol("solver", "ipopt", prob)
         else:
@@ -150,9 +194,9 @@ class NominelMPC:
             }
             self.solver = nlpsol("solver", "ipopt", prob, opts)
 
-        return [w0, lbw, ubw, lbg, ubg]
+        return [w0, lbw, ubw, ubg, lbg]
 
-    def solve_nlp(self, params, p_ref):
+    def solve_nlp(self, params, data):
         # Solve the NLP
         sol = self.solver(
             x0=params[0],
@@ -160,31 +204,19 @@ class NominelMPC:
             ubx=params[2],
             lbg=params[3],
             ubg=params[4],
-            p=p_ref,
+            p=data,
         )
         w_opt = sol["x"].full().flatten()
-        # J_opt = sol["f"].full().flatten()[0]
+        w_opt = self.w(w_opt)
 
-        x_opt = w_opt[0::5]
-        u_opt = [w_opt[1::5], w_opt[2::5], w_opt[3::5], w_opt[4::5]]
-        return x_opt, u_opt
+        self.SOC = np.append(self.SOC, w_opt["states", 1, "SOC"])
+        self.Pbc = np.append(self.Pbc, w_opt["inputs", 0, "Pbc"])
+        self.Pbd = np.append(self.Pbd, w_opt["inputs", 0, "Pbd"])
+        self.Pgb = np.append(self.Pgb, w_opt["inputs", 0, "Pgb"])
+        self.Pgs = np.append(self.Pgs, w_opt["inputs", 0, "Pgs"])
+
+        return self.get_SOC_opt(), self.get_u_opt()
 
 
 if __name__ == "__main__":
     ocp = NominelMPC(1, 6)
-
-    x, lbx, ubx, lbg, ubg = ocp.build_nlp()
-
-    x[0] = 0.4
-    lbx[0] = 0.4
-    ubx[0] = 0.4
-
-    xk_opt, Uk_opt, t_opt, J_opt = ocp.solve_nlp(
-        [x, lbx, ubx, lbg, ubg],
-        vertcat(
-            np.asarray([50, 50, 50, 50, 50, 50]),
-            np.asarray([0, 10, 50, 100, 200, 200]),
-            np.asarray([10, 20, 100, 70, 50, 50]),
-            np.asarray([1, 1.2, 1.3, 70, 50, 50]),
-        ),
-    )
