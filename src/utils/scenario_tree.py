@@ -1,4 +1,5 @@
 import time
+import scipy.stats as stats
 import numpy as np
 import matplotlib.pyplot as plt
 from collections import deque
@@ -15,6 +16,7 @@ class Node:
         self.parent = None
         self.pv = np.max([pv, 0])
         self.l = np.max([l, 0])
+        self.prob = 1
 
         self.leaf = False
 
@@ -29,6 +31,8 @@ class Node:
             return self.pv
         elif signal == "l":
             return self.l
+        elif signal == "prob":
+            return self.prob
         else:
             raise ValueError("Signal not in node")
 
@@ -43,6 +47,7 @@ class Node:
         print("PV:", self.pv)
         print("L:", self.l)
         print("Level", self.level)
+        print("Probability", self.prob)
         print("Scenarios:", self.scenarios)
         print("************ \n")
         for child in self.children:
@@ -80,7 +85,7 @@ def build_scenario_tree(N, Nr, branching, pv_ref, pv_std, l_ref, l_std):
 
             pv_error = np.abs(np.random.normal(0, pv_std))
             l_error = np.abs(np.random.normal(0, l_std))
-
+            p = 0.68
             if b == 3:
                 if j == 2:
                     pv = pv - pv * pv_error
@@ -95,8 +100,11 @@ def build_scenario_tree(N, Nr, branching, pv_ref, pv_std, l_ref, l_std):
                 elif j == 0:
                     pv = pv + pv * pv_error
                     l = l - l * l_error
+            else:
+                p = 1
 
             temp = Node(ids, current.level + 1, pv, l)
+            temp.prob = current.prob * p
             temp.set_parent(current)
             if temp.is_leaf(N):
                 leaf_nodes.append(temp)
@@ -147,4 +155,9 @@ def add_scenario_for_parents(leaf, scenario):
 
 
 if __name__ == "__main__":
-    pass
+    mu = 1
+    std = 0.2
+    x = np.linspace(mu - std, mu + std, 8)
+    plt.plot(x, stats.norm.pdf(x, mu, std))
+    plt.show()
+    print(stats.norm.pdf(x, mu, std))

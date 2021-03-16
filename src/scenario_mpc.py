@@ -1,5 +1,6 @@
 import time
 import numpy as np
+import scipy.stats as stats
 import pandas as pd
 from pprint import pprint
 import matplotlib.pyplot as plt
@@ -42,7 +43,7 @@ def scenario_mpc():
     N = conf["prediction_horizon"] * actions_per_hour
     Nr = conf["robust_horizon"]
     branch_factor = conf["branch_factor"]
-    N_sim = 100
+
     N_scenarios = branch_factor ** Nr
 
     start_time = time.time()
@@ -75,6 +76,9 @@ def scenario_mpc():
 
     sys_metrics = metrics.SystemMetrics()
 
+    mu = 1
+    std = 0.2
+    prob = stats.norm.pdf(np.linspace(mu - std, mu + std, N_scenarios), mu, std) * 2
     for step in range(simulation_horizon - N):
 
         # Get measurements
@@ -82,14 +86,15 @@ def scenario_mpc():
         l_true = l.get_measurement(step)
 
         # Get predictions
-        pv_ref = pv[step : step + N + 1]
+        pv_ref = pv[step : step + N + 1] * (1 + np.random.normal(0, 0.1, N + 1))
         l_ref = l.scaled_mean_pred(l_true, step)
         root, leaf_nodes = build_scenario_tree(
-            N, Nr, branch_factor, pv_ref, 0.001, l_ref, 0.1
+            N, Nr, branch_factor, pv_ref, 0.1, l_ref, 0.1
         )
 
         pv_scenarios = get_scenarios(leaf_nodes, "pv")
         l_scenarios = get_scenarios(leaf_nodes, "l")
+        prob_scenarios = get_scenarios(leaf_nodes, "prob")
 
         # Update parameters
         for i in range(N_scenarios):
@@ -101,6 +106,7 @@ def scenario_mpc():
                 s_data["scenario" + str(i), "data", k, "pv"] = pv_scenarios[i][k]
                 s_data["scenario" + str(i), "data", k, "l"] = l_scenarios[i][k]
                 s_data["scenario" + str(i), "data", k, "E"] = 1
+                s_data["scenario" + str(i), "data", k, "prob"] = prob[i]
 
         xk_opt, Uk_opt = ocp.solve_nlp([s0, lbs, ubs, lbg, ubg], s_data)
 

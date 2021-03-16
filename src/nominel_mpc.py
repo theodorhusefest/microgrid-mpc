@@ -86,7 +86,9 @@ def nominel_mpc():
             l2_ref = l2.perfect_pred(step)
             E_ref = E[step : step + N]
         else:
-            pv_ref = pv_pred[step + 1 : step + N + 1]
+            pv_ref = pv_pred[step + 1 : step + N + 1] * (
+                1 + np.random.normal(0, 0.1, N)
+            )
             l1_ref = l1.scaled_mean_pred(l1_true, step)
             l2_ref = l2.scaled_mean_pred(l2_true, step)
             E_ref = E[step : step + N]

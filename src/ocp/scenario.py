@@ -43,7 +43,7 @@ class ScenarioOCP:
                 entry("inputs", struct=self.inputs, repeat=self.N - 1),
             ]
         )
-        self.data = struct_symSX([entry("pv"), entry("l"), entry("E")])
+        self.data = struct_symSX([entry("pv"), entry("l"), entry("E"), entry("prob")])
         self.all_data = struct_symSX([entry("data", struct=self.data, repeat=self.N)])
 
         self.scenario = struct_symSX([entry("w", struct=self.w)])
@@ -217,7 +217,7 @@ class ScenarioOCP:
                 lbg += [0] * len(eq_con)
                 ubg += [0] * len(eq_con)
 
-            J += J_scen
+            J += self.s_data[scenario, "data", k, "prob"] * J_scen
 
         # Non-anticipativity constraints
         if root:
