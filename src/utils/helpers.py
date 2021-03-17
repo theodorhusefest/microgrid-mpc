@@ -106,43 +106,64 @@ def check_constrain_satisfaction(u0, u1, u2, u3, pv, l):
 def is_zero(x):
     return np.around(x) == 0
 
+def surplus_adjuster(e_hold, u):
+    if e_hold >= u[1]:
+        e_hold -= u[1]
+        u[1] = 0
+    else:
+        u[1] -= e_hold
+        e_hold = 0
+        return u
+
+    if e_hold >= u[2]:
+        e_hold -= u[2]
+        u[2] = 0
+    else:
+        u[2] -= e_hold
+        e_hold = 0
+        return u
+
+    #Battery absorbs the rest of the surplus
+    u[0] += e_hold
+    return u
+
+def deficit_adjuster(e_hold, u):
+    if e_hold >= u[0]:
+        e_hold -= u[0]
+        u[0] = 0
+    else:
+        u[0] -= e_hold
+        e_hold = 0
+        return u
+
+    if e_hold >= u[3]:
+        e_hold -= u[3]
+        u[3] = 0
+    else:
+        u[3] -= e_hold
+        e_hold = 0
+        return u
+
+    #Battery cover the rest with discharge
+    u[1] += e_hold
+    return u
 
 def calculate_real_u(x, u, pv, l):
     """
     Calculates the real inputs based on topology contraint
     """
     e = -u[0] + u[1] + u[2] - u[3] + pv - l
+    e_hold = e
     if is_zero(e):
-        return u
+        return e, u
 
     if e > 0:  # Suplus of energy
-        # Can either charge or sell.
-        if np.around(u[0]) != 0 and np.around(u[1]) == 0:
-            u[0] += e
-        elif np.around(u[3]) != 0 and np.around(u[2]) == 0:
-            u[3] += e
-        elif np.around(u[1]) != 0 and u[1] > e:
-            u[1] -= e  # Discharge less
-        elif u[2] > e:
-            u[2] -= e  # Buy less
-        else:
-            u[2] = 0  # Stop buying
-            u[3] += e  # Start selling
+        u = surplus_adjuster(e, u)
+        return e, u
+
     else:  # Need more energy
-        # Can discharge or buy
-
-        if np.around(u[1]) != 0 and np.around(u[0]) == 0:
-            u[1] -= e
-        elif np.around(u[2]) != 0 and np.around(u[3]) == 0:
-            u[2] -= e
-        elif np.around(u[0]) != 0 and u[0] > np.abs(e):
-            u[0] += e  # Charge less
-        else:
-            u[3] = 0  # Stop selling
-            u[2] -= e  # Buy more"""
-
-    return u
-
+        u = deficit_adjuster(e, u)
+        return e, u
 
 def calculate_real_u_top(Uk, Tk, wt, pv, l1, l2):
 

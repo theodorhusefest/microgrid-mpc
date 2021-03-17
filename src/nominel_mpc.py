@@ -96,7 +96,7 @@ def nominel_mpc():
         xk_opt, Uk_opt = ocp.solve_nlp([x, lbx, ubx, lbg, ubg], forecasts)
 
         # Simulate the system after disturbances
-        uk = utils.calculate_real_u(
+        e, uk = utils.calculate_real_u(
             xk_opt,
             Uk_opt,
             pv[step + 1],
