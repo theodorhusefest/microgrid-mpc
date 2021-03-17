@@ -106,6 +106,7 @@ def check_constrain_satisfaction(u0, u1, u2, u3, pv, l):
 def is_zero(x):
     return np.around(x) == 0
 
+
 def surplus_adjuster(e_hold, u):
     if e_hold >= u[1]:
         e_hold -= u[1]
@@ -123,9 +124,10 @@ def surplus_adjuster(e_hold, u):
         e_hold = 0
         return u
 
-    #Battery absorbs the rest of the surplus
+    # Battery absorbs the rest of the surplus
     u[0] += e_hold
     return u
+
 
 def deficit_adjuster(e_hold, u):
     if e_hold >= u[0]:
@@ -144,9 +146,10 @@ def deficit_adjuster(e_hold, u):
         e_hold = 0
         return u
 
-    #Battery cover the rest with discharge
+    # Battery cover the rest with discharge
     u[1] += e_hold
     return u
+
 
 def calculate_real_u(x, u, pv, l):
     """
@@ -164,6 +167,7 @@ def calculate_real_u(x, u, pv, l):
     else:  # Need more energy
         u = deficit_adjuster(e, u)
         return e, u
+
 
 def calculate_real_u_top(Uk, Tk, wt, pv, l1, l2):
 

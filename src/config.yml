@@ -1,17 +1,18 @@
-simulation_horizon: 24 # hours
+simulation_horizon: 60 # hours
 prediction_horizon: 3 # hours
 robust_horizon: 2 # steps
-branch_factor: 2
+branch_factor: 3
 
 actions_per_hour: 6
 logpath: "./logs/"
-datafile: "./data/load_PV3.csv"
+datafile: "./data/09.03_cleaned.csv"
 loads_trainfile: "./data/loads_train.csv"
+solcast_file: "./data/solcast_cleaned.csv"
 openloop: False
 perfect_predictions: False
 
 battery:
-  x_initial: 0.35
+  x_initial: 0.88
   C_MAX: 1000
   nb: 0.913724
 
@@ -25,6 +26,6 @@ system:
   Pb_max: 1000
   Pg_max: 1000
   battery_cost: 0.128
-  grid_cost: 10
-  ref_cost: 10
+  grid_cost: 2
+  ref_cost: 100
   verbose: False

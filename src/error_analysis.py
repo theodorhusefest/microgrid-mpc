@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sn
 
 from components.loads import Load
+from components.PV import Photovoltaic
 from statsmodels.stats.diagnostic import lilliefors
 
 
@@ -42,6 +43,15 @@ def load_analysis(data, L, method, plot=True):
         plt.show()
 
     return error_df
+
+
+def pv_analysis(N, pv, data, forecasts, plot=True):
+    """
+    Calculates the error between prediction and observed production
+    """
+    daily_errors = []
+    for day, day_df in data.groupby(data.date.dt.day):
+        print(day)
 
 
 def plot_predictions(L, method):
@@ -104,9 +114,18 @@ def plot_daily_errors(daily_errors, name):
 
 
 if __name__ == "__main__":
-    N = 12
-    L = Load(N, "./data/loads_train.csv", "L2", groundtruth="./data/load_PV3.csv")
-    test_data = pd.read_csv("./data/data_oct20.csv", parse_dates=["date"]).iloc[::10]
+    N = 18
+    # L = Load(N, "./data/loads_train.csv", "L2", groundtruth="./data/load_PV3.csv")
+    # test_data = pd.read_csv("./data/data_oct20.csv", parse_dates=["date"]).iloc[::10]
 
-    load_analysis(test_data, L, L.scaled_mean_pred)
+    # load_analysis(test_data, L, L.scaled_mean_pred)
     # load_analysis(test_data, L, L.constant_pred)
+
+    # Get data
+    observations = pd.read_csv("./data/09.03_cleaned.csv", parse_dates=["date"])
+    # observations = observations[observations["date"] >= datetime(2021, 3, 11)]
+    solcast_forecasts = pd.read_csv(
+        "./data/solcast_cleaned.csv", parse_dates=["time", "collected"]
+    )
+
+    pv_analysis(N, Photovoltaic(), observations, solcast_forecasts)

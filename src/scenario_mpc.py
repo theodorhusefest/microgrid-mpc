@@ -1,9 +1,10 @@
 import time
 import numpy as np
-import scipy.stats as stats
 import pandas as pd
-from pprint import pprint
+import scipy.stats as stats
 import matplotlib.pyplot as plt
+
+from datetime import datetime, timedelta
 
 import utils.plots as p
 import utils.metrics as metrics
@@ -11,6 +12,7 @@ import utils.helpers as utils
 
 from components.loads import Load
 from ocp.scenario import ScenarioOCP
+from components.PV import Photovoltaic
 from components.battery import Battery
 from components.spot_price import get_spot_price
 from utils.scenario_tree import build_scenario_tree, get_scenarios
@@ -49,11 +51,25 @@ def scenario_mpc():
     start_time = time.time()
     step_time = start_time
 
-    pv, pv_pred, l1, l1_pred, l2, l2_pred, grid_buy = utils.load_data()
+    # Get data
+    observations = pd.read_csv(datafile, parse_dates=["date"])
+    # observations = observations[observations["date"] >= datetime(2021, 3, 11)]
+    solcast_forecasts = pd.read_csv(
+        conf["solcast_file"], parse_dates=["time", "collected"]
+    )
 
-    l = Load(N, loads_trainfile, "L", groundtruth=l1 + l2)
-    E = np.ones(144) * 1  # get_spot_price()
+    current_time = observations.date.iloc[0]
+
+    forecast = solcast_forecasts[
+        solcast_forecasts["collected"] == current_time - timedelta(minutes=60)
+    ]
+
+    obs = observations[observations["date"] == current_time]
+
+    l = Load(N, loads_trainfile, "L", groundtruth=observations["L"])
+    E = np.ones(2000)  # get_spot_price()
     B = Battery(T, N, **conf["battery"])
+    PV = Photovoltaic()
 
     Pbc = []
     Pbd = []
@@ -61,8 +77,7 @@ def scenario_mpc():
     Pgb = []
 
     pv_measured = []
-    l1_measured = []
-    l2_measured = []
+    l_measured = []
 
     # Build reference tree
     tree, leaf_nodes = build_scenario_tree(
@@ -76,25 +91,42 @@ def scenario_mpc():
 
     sys_metrics = metrics.SystemMetrics()
 
-    mu = 1
-    std = 0.2
-    prob = stats.norm.pdf(np.linspace(mu - std, mu + std, N_scenarios), mu, std) * 2
     for step in range(simulation_horizon - N):
 
         # Get measurements
-        pv_true = pv[step]
-        l_true = l.get_measurement(step)
+        pv_true = obs["PV"].values[0]
+        l_true = obs["L"].values[0]
+
+        pv_measured.append(pv_true)
+        l_measured.append(l_true)
+
+        # Get new forecasts every hour
+
+        if current_time.minute == 30:
+            new_forecast = solcast_forecasts[
+                solcast_forecasts["collected"] == current_time - timedelta(minutes=30)
+            ]
+            if new_forecast.empty:
+                print("Could not find forecast, using old forecast")
+            else:
+                forcast = new_forecast
+
+        ref = forecast[
+            (forecast["time"] >= current_time)
+            & (forecast["time"] < current_time + timedelta(minutes=10 * (N + 1)))
+        ]
+
+        pv_ref = PV.predict(ref.temp.values, ref.GHI.values)
+        plt.plot()
 
         # Get predictions
-        pv_ref = pv[step : step + N + 1] * (1 + np.random.normal(0, 0.1, N + 1))
-        l_ref = l.scaled_mean_pred(l_true, step)
+        l_ref = l.scaled_mean_pred(l_true, step % 120)
         root, leaf_nodes = build_scenario_tree(
-            N, Nr, branch_factor, pv_ref, 0.1, l_ref, 0.1
+            N, Nr, branch_factor, pv_ref, 0.2, l_ref, 0.2
         )
 
         pv_scenarios = get_scenarios(leaf_nodes, "pv")
         l_scenarios = get_scenarios(leaf_nodes, "l")
-        prob_scenarios = get_scenarios(leaf_nodes, "prob")
 
         # Update parameters
         for i in range(N_scenarios):
@@ -106,13 +138,16 @@ def scenario_mpc():
                 s_data["scenario" + str(i), "data", k, "pv"] = pv_scenarios[i][k]
                 s_data["scenario" + str(i), "data", k, "l"] = l_scenarios[i][k]
                 s_data["scenario" + str(i), "data", k, "E"] = 1
-                s_data["scenario" + str(i), "data", k, "prob"] = prob[i]
+                s_data["scenario" + str(i), "data", k, "prob"] = 1
 
         xk_opt, Uk_opt = ocp.solve_nlp([s0, lbs, ubs, lbg, ubg], s_data)
 
         # Simulate the system after disturbances
-        e, uk = utils.calculate_real_u(
-            xk_opt, Uk_opt, pv[step + 1], l.get_measurement(step + 1)
+        current_time += timedelta(minutes=10)
+
+        obs = observations[observations["date"] == current_time]
+        uk = utils.calculate_real_u(
+            xk_opt, Uk_opt, obs["PV"].values[0], obs["L"].values[0]
         )
 
         Pbc.append(uk[0])
@@ -122,9 +157,7 @@ def scenario_mpc():
 
         B.simulate_SOC(xk_opt, [uk[0], uk[1]])
 
-        sys_metrics.update_metrics(
-            [Pbc[step], Pbd[step], Pgb[step], Pgs[step]], E[step]
-        )
+        sys_metrics.update_metrics([Pbc[-1], Pbd[-1], Pgb[-1], Pgs[-1]], E[-1])
 
         utils.print_status(step, [B.get_SOC(openloop)], step_time, every=50)
         step_time = time.time()
@@ -138,25 +171,23 @@ def scenario_mpc():
         [np.asarray(Pbc) - np.asarray(Pbd), np.asarray(Pgb) - np.asarray(Pgs)]
     )
 
-    if openloop:
-        p.plot_control_actions(
-            np.asarray([ocp.Pbc - ocp.Pbd, ocp.Pgb - ocp.Pgb]),
-            horizon - T,
-            actions_per_hour,
-            logpath,
-            legends=["Battery", "Grid"],
-            title="Optimal Control Actions",
-        )
+    p.plot_control_actions(
+        np.asarray([ocp.Pbc - ocp.Pbd, ocp.Pgb - ocp.Pgb]),
+        horizon - T,
+        actions_per_hour,
+        logpath,
+        legends=["Battery", "Grid"],
+        title="Optimal Control Actions",
+    )
 
-    else:
-        p.plot_control_actions(
-            u,
-            horizon - T,
-            actions_per_hour,
-            logpath,
-            legends=["Battery", "Grid"],
-            title="Simulated Control Actions",
-        )
+    p.plot_control_actions(
+        u,
+        horizon - T,
+        actions_per_hour,
+        logpath,
+        legends=["Battery", "Grid"],
+        title="Simulated Control Actions",
+    )
 
     p.plot_data(
         np.asarray([B.x_sim, B.x_opt]),
@@ -164,9 +195,11 @@ def scenario_mpc():
         legends=["SOC", "SOC_opt"],
     )
 
-    p.plot_data(np.asarray([pv]), title="PV", legends=["PV"])
-
-    p.plot_data(np.asarray([l.true]), title="Loads", legends=["l"])
+    p.plot_data(
+        np.asarray([pv_measured, l_measured]),
+        title="PV and Load",
+        legends=["PV", "Load"],
+    )
 
     p.plot_data(np.asarray([E]), title="Spot Prices", legends=["Spotprice"])
 

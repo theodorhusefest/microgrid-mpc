@@ -170,6 +170,10 @@ class ScenarioOCP:
             * self.s[scenario, "inputs", k, "Pgb"]
             * self.s[scenario, "inputs", k, "Pgs"]
         )
+        J_scen += (
+            self.ref_cost
+            * ((self.x_ref - self.s[scenario, "states", k, "SOC"]) * 100) ** 2
+        )
         return J_scen
 
     def build_scenario_ocp(self, root=None):
