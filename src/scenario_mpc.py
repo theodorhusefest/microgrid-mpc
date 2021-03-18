@@ -78,6 +78,7 @@ def scenario_mpc():
 
     pv_measured = []
     l_measured = []
+    errors = []
 
     # Build reference tree
     tree, leaf_nodes = build_scenario_tree(
@@ -119,7 +120,7 @@ def scenario_mpc():
         pv_ref = PV.predict(ref.temp.values, ref.GHI.values)
         l_ref = l.scaled_mean_pred(l_true, step % 126)
         root, leaf_nodes = build_scenario_tree(
-            N, Nr, branch_factor, pv_ref, 0.2, l_ref, 0.2
+            N, Nr, branch_factor, pv_ref, 0.5, l_ref, 0.5
         )
 
         pv_scenarios = get_scenarios(leaf_nodes, "pv")
@@ -143,9 +144,11 @@ def scenario_mpc():
         current_time += timedelta(minutes=10)
 
         obs = observations[observations["date"] == current_time]
-        uk = utils.calculate_real_u(
+        e, uk = utils.calculate_real_u(
             xk_opt, Uk_opt, obs["PV"].values[0], obs["L"].values[0]
         )
+
+        errors.append(e)
 
         Pbc.append(uk[0])
         Pbd.append(uk[1])
@@ -154,7 +157,7 @@ def scenario_mpc():
 
         B.simulate_SOC(xk_opt, [uk[0], uk[1]])
 
-        sys_metrics.update_metrics([Pbc[-1], Pbd[-1], Pgb[-1], Pgs[-1]], E[-1])
+        sys_metrics.update_metrics([Pbc[-1], Pbd[-1], Pgb[-1], Pgs[-1]], E[-1], e)
 
         utils.print_status(step, [B.get_SOC(openloop)], step_time, every=50)
         step_time = time.time()
@@ -191,6 +194,8 @@ def scenario_mpc():
         title="State of charge",
         legends=["SOC", "SOC_opt"],
     )
+
+    p.plot_data([np.asarray(errors)], title="Errors")
 
     p.plot_data(
         np.asarray([pv_measured, l_measured]),

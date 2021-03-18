@@ -71,6 +71,7 @@ def nominel_mpc():
 
     pv_measured = []
     l_measured = []
+    errors = []
 
     ocp = NominelMPC(T, N)
     sys_metrics = metrics.SystemMetrics()
@@ -123,9 +124,10 @@ def nominel_mpc():
         current_time += timedelta(minutes=10)
         obs = observations[observations["date"] == current_time]
 
-        uk = utils.calculate_real_u(
+        e, uk = utils.calculate_real_u(
             xk_opt, Uk_opt, obs["PV"].values[0], obs["L"].values[0]
         )
+        errors.append(e)
 
         Pbc.append(uk[0])
         Pbd.append(uk[1])
@@ -135,7 +137,7 @@ def nominel_mpc():
         B.simulate_SOC(xk_opt, [uk[0], uk[1]])
 
         sys_metrics.update_metrics(
-            [Pbc[step], Pbd[step], Pgb[step], Pgs[step]], E[step]
+            [Pbc[step], Pbd[step], Pgb[step], Pgs[step]], E[step], e
         )
 
         utils.print_status(step, [B.get_SOC(openloop)], step_time, every=50)
@@ -174,6 +176,8 @@ def nominel_mpc():
         title="State of charge",
         legends=["SOC", "SOC_opt"],
     )
+
+    p.plot_data([np.asarray(errors)], title="Errors")
 
     p.plot_data(
         np.asarray([pv_measured, l_measured]), title="PV & Load", legends=["PV", "L"]

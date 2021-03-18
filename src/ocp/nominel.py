@@ -101,6 +101,7 @@ class NominelMPC:
             + self.grid_cost * (self.inputs["Pgb"] + self.inputs["Pgs"]) ** 2
             + 100 * self.inputs["Pbc"] * self.inputs["Pbd"]
             + 100 * self.inputs["Pgb"] * self.inputs["Pgs"]
+            + self.ref_cost * ((self.x_ref - self.states["SOC"]) * 100) ** 2
         )
 
     def build_integrator(self, e_spot):

@@ -14,6 +14,7 @@ class SystemMetrics:
         self.pv_rmse = 0
         self.dependency_rate = -1
         self.consumption_rate = -1
+        self.accumulated_error = 0
 
         self.steps = 0
 
@@ -45,7 +46,7 @@ class SystemMetrics:
         """
         self.dependency_rate = 1 - (np.sum(Pgb) / np.sum(l[0 : len(Pgb)]))
 
-    def update_metrics(self, U, spot_price):
+    def update_metrics(self, U, spot_price, e):
         """
         Updates all metrics
         """
@@ -55,6 +56,7 @@ class SystemMetrics:
             self.battery_deg * (np.sum(np.abs([U[0:1]]))) / self.actions_per_hour
         )
         self.grid_max = np.max([self.grid_max, U[2]])
+        self.accumulated_error += np.abs(e)
 
     def print_metrics(self):
         """
@@ -74,6 +76,7 @@ class SystemMetrics:
                 np.around(self.consumption_rate * 100, 1)
             )
         )
+        print("Accumulated Error: ", self.accumulated_error)
         print("-" * 100)
 
 
