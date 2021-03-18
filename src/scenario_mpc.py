@@ -101,7 +101,6 @@ def scenario_mpc():
         l_measured.append(l_true)
 
         # Get new forecasts every hour
-
         if current_time.minute == 30:
             new_forecast = solcast_forecasts[
                 solcast_forecasts["collected"] == current_time - timedelta(minutes=30)
@@ -109,18 +108,16 @@ def scenario_mpc():
             if new_forecast.empty:
                 print("Could not find forecast, using old forecast")
             else:
-                forcast = new_forecast
+                forecast = new_forecast
 
         ref = forecast[
             (forecast["time"] >= current_time)
             & (forecast["time"] < current_time + timedelta(minutes=10 * (N + 1)))
         ]
 
-        pv_ref = PV.predict(ref.temp.values, ref.GHI.values)
-        plt.plot()
-
         # Get predictions
-        l_ref = l.scaled_mean_pred(l_true, step % 120)
+        pv_ref = PV.predict(ref.temp.values, ref.GHI.values)
+        l_ref = l.scaled_mean_pred(l_true, step % 126)
         root, leaf_nodes = build_scenario_tree(
             N, Nr, branch_factor, pv_ref, 0.2, l_ref, 0.2
         )
@@ -163,7 +160,7 @@ def scenario_mpc():
         step_time = time.time()
 
     sys_metrics.calculate_consumption_rate(Pgs, pv_measured)
-    sys_metrics.calculate_dependency_rate(Pgb, l.true)
+    sys_metrics.calculate_dependency_rate(Pgb, l_measured)
     sys_metrics.print_metrics()
 
     # Plotting
@@ -201,7 +198,7 @@ def scenario_mpc():
         legends=["PV", "Load"],
     )
 
-    p.plot_data(np.asarray([E]), title="Spot Prices", legends=["Spotprice"])
+    # p.plot_data(np.asarray([E]), title="Spot Prices", legends=["Spotprice"])
 
     stop = time.time()
     print("\nFinished optimation in {}s".format(np.around(stop - start_time, 2)))

@@ -1,15 +1,16 @@
 import time
 import numpy as np
 import pandas as pd
-from casadi import vertcat
 import matplotlib.pyplot as plt
 import utils.plots as p
 import utils.metrics as metrics
 import utils.helpers as utils
 
 from pprint import pprint
+from datetime import datetime, timedelta
 
 from components.spot_price import get_spot_price
+from components.PV import Photovoltaic
 from ocp.nominel import NominelMPC
 from components.loads import Load
 from components.battery import Battery
@@ -43,12 +44,25 @@ def nominel_mpc():
     start_time = time.time()
     step_time = start_time
 
-    pv, pv_pred, l1, l1_pred, l2, l2_pred, grid_buy = utils.load_data()
+    # Get data
+    observations = pd.read_csv(datafile, parse_dates=["date"])
+    # observations = observations[observations["date"] >= datetime(2021, 3, 11)]
+    solcast_forecasts = pd.read_csv(
+        conf["solcast_file"], parse_dates=["time", "collected"]
+    )
 
-    l1 = Load(N, loads_trainfile, "L1", groundtruth=l1)
-    l2 = Load(N, loads_trainfile, "L2", groundtruth=l2)
-    E = np.ones(144) * 1  # get_spot_price()
+    current_time = observations.date.iloc[0]
+
+    forecast = solcast_forecasts[
+        solcast_forecasts["collected"] == current_time - timedelta(minutes=60)
+    ]
+
+    obs = observations[observations["date"] == current_time]
+
+    l = Load(N, loads_trainfile, "L", groundtruth=observations["L"])
+    E = np.ones(2000)  # get_spot_price()
     B = Battery(T, N, **conf["battery"])
+    PV = Photovoltaic()
 
     Pbc = []
     Pbd = []
@@ -56,8 +70,7 @@ def nominel_mpc():
     Pgb = []
 
     pv_measured = []
-    l1_measured = []
-    l2_measured = []
+    l_measured = []
 
     ocp = NominelMPC(T, N)
     sys_metrics = metrics.SystemMetrics()
@@ -71,38 +84,47 @@ def nominel_mpc():
         lbx["states", 0, "SOC"] = B.get_SOC(openloop)
         ubx["states", 0, "SOC"] = B.get_SOC(openloop)
 
-        pv_true = pv[step]
-        l1_true = l1.get_measurement(step)
-        l2_true = l2.get_measurement(step)
+        pv_true = obs["PV"].values[0]
+        l_true = obs["L"].values[0]
 
         pv_measured.append(pv_true)
-        l1_measured.append(l1_true)
-        l2_measured.append(l2_true)
+        l_measured.append(l_true)
+
+        # Get new forecasts every hour
+        if current_time.minute == 30:
+            new_forecast = solcast_forecasts[
+                solcast_forecasts["collected"] == current_time - timedelta(minutes=30)
+            ]
+            if new_forecast.empty:
+                print("Could not find forecast, using old forecast")
+            else:
+                forecast = new_forecast
+
+        ref = forecast[
+            (forecast["time"] >= current_time)
+            & (forecast["time"] < current_time + timedelta(minutes=10 * (N + 1)))
+        ]
 
         # Create predictions for next period
         if perfect_predictions:
             pv_ref = pv[step + 1 : step + N + 1]
             l1_ref = l1.perfect_pred(step)
-            l2_ref = l2.perfect_pred(step)
             E_ref = E[step : step + N]
         else:
-            pv_ref = pv_pred[step + 1 : step + N + 1] * (
-                1 + np.random.normal(0, 0.1, N)
-            )
-            l1_ref = l1.scaled_mean_pred(l1_true, step)
-            l2_ref = l2.scaled_mean_pred(l2_true, step)
+            pv_ref = PV.predict(ref.temp.values, ref.GHI.values)
+            l_ref = l.scaled_mean_pred(l_true, step % 126)
             E_ref = E[step : step + N]
 
-        forecasts = ocp.update_forecasts(pv_ref, l1_ref, l2_ref, E_ref)
+        forecasts = ocp.update_forecasts(pv_ref, l_ref, E_ref)
 
         xk_opt, Uk_opt = ocp.solve_nlp([x, lbx, ubx, lbg, ubg], forecasts)
 
         # Simulate the system after disturbances
-        e, uk = utils.calculate_real_u(
-            xk_opt,
-            Uk_opt,
-            pv[step + 1],
-            l1.get_measurement(step + 1) + l2.get_measurement(step + 1),
+        current_time += timedelta(minutes=10)
+        obs = observations[observations["date"] == current_time]
+
+        uk = utils.calculate_real_u(
+            xk_opt, Uk_opt, obs["PV"].values[0], obs["L"].values[0]
         )
 
         Pbc.append(uk[0])
@@ -120,7 +142,7 @@ def nominel_mpc():
         step_time = time.time()
 
     sys_metrics.calculate_consumption_rate(Pgs, pv_measured)
-    sys_metrics.calculate_dependency_rate(Pgb, l1.true + l2.true)
+    sys_metrics.calculate_dependency_rate(Pgb, l_measured)
     sys_metrics.print_metrics()
 
     # Plotting
@@ -153,11 +175,11 @@ def nominel_mpc():
         legends=["SOC", "SOC_opt"],
     )
 
-    p.plot_data(np.asarray([pv_measured]), title="PV", legends=["PV"])
+    p.plot_data(
+        np.asarray([pv_measured, l_measured]), title="PV & Load", legends=["PV", "L"]
+    )
 
-    p.plot_data(np.asarray([l1.true, l2.true]), title="Loads", legends=["l1", "l2"])
-
-    p.plot_data(np.asarray([E]), title="Spot Prices", legends=["Spotprice"])
+    # p.plot_data(np.asarray([E]), title="Spot Prices", legends=["Spotprice"])
 
     stop = time.time()
     print("\nFinished optimation in {}s".format(np.around(stop - start_time, 2)))

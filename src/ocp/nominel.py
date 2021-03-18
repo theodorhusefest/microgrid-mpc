@@ -41,7 +41,7 @@ class NominelMPC:
                 entry("inputs", struct=self.inputs, repeat=self.N - 1),
             ]
         )
-        self.data = struct_symSX([entry("pv"), entry("l1"), entry("l2"), entry("E")])
+        self.data = struct_symSX([entry("pv"), entry("l"), entry("E")])
         self.all_data = struct_symSX([entry("data", struct=self.data, repeat=self.N)])
 
         self.E = SX.sym("E", self.N)
@@ -80,7 +80,7 @@ class NominelMPC:
             (self.nb_c * self.inputs["Pbc"]) - self.inputs["Pbd"] / self.nb_d
         )
 
-    def update_forecasts(self, pv, l1, l2, E):
+    def update_forecasts(self, pv, l, E):
         """
         Creates datastruct with relevant data
         """
@@ -88,8 +88,7 @@ class NominelMPC:
         data_struct = self.all_data(0)
         for k in range(self.N):
             data_struct["data", k, "pv"] = pv[k]
-            data_struct["data", k, "l1"] = l1[k]
-            data_struct["data", k, "l2"] = l2[k]
+            data_struct["data", k, "l"] = l[k]
             data_struct["data", k, "E"] = E[k]
 
         return data_struct
@@ -177,8 +176,7 @@ class NominelMPC:
                 + self.w["inputs", k, "Pgb"]
                 - self.w["inputs", k, "Pgs"]
                 + self.all_data["data", k, "pv"]
-                - self.all_data["data", k, "l1"]
-                - self.all_data["data", k, "l2"]
+                - self.all_data["data", k, "l"]
             ]
             lbg += [0] * (Xk_end.size(1) + 1)
             ubg += [0] * (Xk_end.size(1) + 1)

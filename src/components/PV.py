@@ -111,7 +111,8 @@ class Photovoltaic:
             Iph
             - Is
             * (np.exp(self.q * (V + I * self.rs) / (self.Ns * self.K * self.A * T)) - 1)
-        )  # - (V + I * self.rs)/self.rsh)
+            # - (V + I * self.rs) / self.rsh
+        )
         f = -I * V
 
         nlp_prob = {"f": f, "x": vertcat(I, V), "g": g, "p": vertcat(T, G)}

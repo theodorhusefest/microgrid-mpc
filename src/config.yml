@@ -6,7 +6,7 @@ branch_factor: 3
 actions_per_hour: 6
 logpath: "./logs/"
 datafile: "./data/09.03_cleaned.csv"
-loads_trainfile: "./data/loads_train.csv"
+loads_trainfile: "./data/09.03_cleaned.csv"
 solcast_file: "./data/solcast_cleaned.csv"
 openloop: False
 perfect_predictions: False

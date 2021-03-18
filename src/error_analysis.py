@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sn
+from datetime import datetime, timedelta
 
 from components.loads import Load
 from components.PV import Photovoltaic
@@ -50,8 +51,30 @@ def pv_analysis(N, pv, data, forecasts, plot=True):
     Calculates the error between prediction and observed production
     """
     daily_errors = []
-    for day, day_df in data.groupby(data.date.dt.day):
-        print(day)
+    for (year, month, day, hour), day_df in forecasts.groupby(
+        [
+            forecasts.collected.dt.year,
+            forecasts.collected.dt.month,
+            forecasts.collected.dt.day,
+            forecasts.collected.dt.hour,
+        ]
+    ):
+        forecast = day_df.iloc[0:N]
+        if forecast.shape[0] < N:
+            break
+        df = pd.merge(
+            forecast,
+            data,
+            left_on="time",
+            right_on="date",
+            suffixes=("_forecast", "_obs"),
+        )
+        df["PV_pred"] = pv.predict(df.temp.values, df.GHI_obs.values)
+
+        plt.plot(df["time"], df["PV"], color="red")
+        plt.plot(df["time"], df["PV_pred"], color="blue")
+
+    plt.show()
 
 
 def plot_predictions(L, method):
@@ -127,5 +150,16 @@ if __name__ == "__main__":
     solcast_forecasts = pd.read_csv(
         "./data/solcast_cleaned.csv", parse_dates=["time", "collected"]
     )
-
-    pv_analysis(N, Photovoltaic(), observations, solcast_forecasts)
+    solcast_forecasts = solcast_forecasts[
+        (solcast_forecasts["collected"] >= observations.date.iloc[0])
+        & (solcast_forecasts["time"] < datetime(2021, 3, 11))
+    ]
+    pv_analysis(
+        N,
+        Photovoltaic(
+            Pm=800,
+            Voc=100,
+        ),
+        observations,
+        solcast_forecasts,
+    )
