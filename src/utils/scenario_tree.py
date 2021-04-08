@@ -125,7 +125,7 @@ def traverse_leaf_to_root(leaf, signal):
     """
     scenario = []
     current = leaf
-    while current:
+    while current.parent:
         scenario.append(current.get_value(signal))
         current = current.parent
 

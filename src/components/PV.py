@@ -136,6 +136,7 @@ class Photovoltaic:
         return (self.V_value * self.I_value).full().flatten()[0]
 
     def predict(self, T, G):
+
         assert len(T) == len(G)
         return np.asarray([self.solve_prob(T[i], G[i]) for i in range(len(T))])
 

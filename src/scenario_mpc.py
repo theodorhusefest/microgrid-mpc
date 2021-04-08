@@ -22,6 +22,8 @@ def scenario_mpc():
     """
     Main function for mpc-scheme with receding horizion.
     """
+    np.random.seed(1)
+
     conf = utils.parse_config()
     datafile = conf["datafile"]
     loads_trainfile = conf["loads_trainfile"]
@@ -53,7 +55,7 @@ def scenario_mpc():
 
     # Get data
     observations = pd.read_csv(datafile, parse_dates=["date"])
-    # observations = observations[observations["date"] >= datetime(2021, 3, 11)]
+    observations = observations[observations["date"] >= datetime(2021, 3, 13)]
     solcast_forecasts = pd.read_csv(
         conf["solcast_file"], parse_dates=["time", "collected"]
     )
@@ -64,7 +66,10 @@ def scenario_mpc():
         solcast_forecasts["collected"] == current_time - timedelta(minutes=60)
     ]
 
-    obs = observations[observations["date"] == current_time]
+    obs = observations[
+        (observations["date"] >= current_time)
+        & (observations["date"] <= current_time + timedelta(minutes=10 * N))
+    ]
 
     l = Load(N, loads_trainfile, "L", groundtruth=observations["L"])
     E = np.ones(2000)  # get_spot_price()
@@ -88,7 +93,7 @@ def scenario_mpc():
     ocp = ScenarioOCP(T, N, N_scenarios)
     s_data = ocp.s_data(0)
 
-    s0, lbs, ubs, lbg, ubg = ocp.build_scenario_ocp()
+    s0, lbs, ubs, lbg, ubg = ocp.build_scenario_ocp(tree)
 
     sys_metrics = metrics.SystemMetrics()
 
@@ -113,16 +118,20 @@ def scenario_mpc():
 
         ref = forecast[
             (forecast["time"] >= current_time)
-            & (forecast["time"] < current_time + timedelta(minutes=10 * (N + 1)))
+            & (forecast["time"] <= current_time + timedelta(minutes=10 * (N)))
         ]
 
         # Get predictions
-        pv_ref = PV.predict(ref.temp.values, ref.GHI.values)
-        l_ref = l.scaled_mean_pred(l_true, step % 126)
-        root, leaf_nodes = build_scenario_tree(
-            N, Nr, branch_factor, pv_ref, 0.5, l_ref, 0.5
-        )
+        if perfect_predictions:
+            pv_ref = obs["PV"].values + np.random.normal(0, 0.2, N + 1)
+            l_ref = obs["L"].values + np.random.normal(0, 0.2, N + 1)
+        else:
+            pv_ref = PV.predict(ref.temp.values, ref.GHI.values)
+            l_ref = l.scaled_mean_pred(l_true, step % 126)
 
+        root, leaf_nodes = build_scenario_tree(
+            N, Nr, branch_factor, pv_ref, 0.2, l_ref, 0.2
+        )
         pv_scenarios = get_scenarios(leaf_nodes, "pv")
         l_scenarios = get_scenarios(leaf_nodes, "l")
 
@@ -143,7 +152,11 @@ def scenario_mpc():
         # Simulate the system after disturbances
         current_time += timedelta(minutes=10)
 
-        obs = observations[observations["date"] == current_time]
+        obs = observations[
+            (observations["date"] >= current_time)
+            & (observations["date"] <= current_time + timedelta(minutes=10 * N))
+        ]
+
         e, uk = utils.calculate_real_u(
             xk_opt, Uk_opt, obs["PV"].values[0], obs["L"].values[0]
         )
@@ -172,7 +185,7 @@ def scenario_mpc():
     )
 
     p.plot_control_actions(
-        np.asarray([ocp.Pbc - ocp.Pbd, ocp.Pgb - ocp.Pgb]),
+        np.asarray([ocp.Pbc - ocp.Pbd, ocp.Pgb - ocp.Pgs]),
         horizon - T,
         actions_per_hour,
         logpath,

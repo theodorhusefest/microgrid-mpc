@@ -2,6 +2,7 @@
 src/logs/
 src/data_collect/
 src/sim-data/
+src/data_analysis/solcast/
 
 **.vscode/
 # Byte-compiled / optimized / DLL files
@@ -11,7 +12,7 @@ __pycache__/
 
 # C extensions
 *.so
-
+**/Icon
 # Distribution / packaging
 .Python
 build/

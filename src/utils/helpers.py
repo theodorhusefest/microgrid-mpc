@@ -17,14 +17,6 @@ def parse_config():
     return conf
 
 
-def create_folder(folderpath):
-    """
-    Creates a folder
-    """
-    if is_active.exists(folderpath):
-        os.makedirs(folderpath)
-
-
 def create_logs_folder(rootdir="./logs/", foldername=""):
     """
     Creates a unique folder for the current run
@@ -104,7 +96,7 @@ def check_constrain_satisfaction(u0, u1, u2, u3, pv, l):
 
 
 def is_zero(x):
-    return np.around(x) == 0
+    return np.around(x, 3) == 0
 
 
 def surplus_adjuster(e_hold, u):
@@ -130,6 +122,7 @@ def surplus_adjuster(e_hold, u):
 
 
 def deficit_adjuster(e_hold, u):
+    e_hold = np.abs(e_hold)
     if e_hold >= u[0]:
         e_hold -= u[0]
         u[0] = 0
@@ -158,15 +151,12 @@ def calculate_real_u(x, u, pv, l):
     e = -u[0] + u[1] + u[2] - u[3] + pv - l
     e_hold = e
     if is_zero(e):
-        return e, u
-
-    if e > 0:  # Suplus of energy
+        pass
+    elif e > 0:  # Suplus of energy
         u = surplus_adjuster(e, u)
-        return e, u
-
     else:  # Need more energy
         u = deficit_adjuster(e, u)
-        return e, u
+    return e, u
 
 
 def calculate_real_u_top(Uk, Tk, wt, pv, l1, l2):

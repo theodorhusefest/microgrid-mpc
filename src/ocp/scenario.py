@@ -107,16 +107,14 @@ class ScenarioOCP:
         return data_struct
 
     def build_objective_function(self, e_spot):
-        """
-        Returns the continous costfunction used in integrator
-        """
 
         return (
             self.battery_cost * (self.inputs["Pbc"] + self.inputs["Pbd"])
             + e_spot * (self.inputs["Pgb"] - self.inputs["Pgs"])
             + self.grid_cost * (self.inputs["Pgb"] + self.inputs["Pgs"]) ** 2
-            + +100 * self.inputs["Pbc"] * self.inputs["Pbd"]
-            + 100 * self.inputs["Pgb"] * self.inputs["Pgs"]
+            + 100000 * self.inputs["Pbc"] * self.inputs["Pbd"]
+            + 100000 * self.inputs["Pgb"] * self.inputs["Pgs"]
+            + self.ref_cost * ((self.x_ref - self.states["SOC"]) * 100) ** 2
         )
 
     def build_integrator(self, e_spot):
@@ -150,13 +148,14 @@ class ScenarioOCP:
             self.s[scenario, "inputs", k, "Pbc"] + self.s[scenario, "inputs", k, "Pbd"]
         )
         J_scen += 1 * (
-            self.s[scenario, "inputs", k, "Pgb"] - self.s[scenario, "inputs", k, "Pgs"]
+            self.s[scenario, "inputs", k, "Pgb"]
+            - 0.7 * self.s[scenario, "inputs", k, "Pgs"]
         )
         J_scen += (
             self.grid_cost
             * (
                 self.s[scenario, "inputs", k, "Pgb"]
-                - self.s[scenario, "inputs", k, "Pgs"]
+                + self.s[scenario, "inputs", k, "Pgs"]
             )
             ** 2
         )
@@ -205,9 +204,9 @@ class ScenarioOCP:
 
                 Fk = F(x0=states_k, p=inputs_k)
                 Xk_end = Fk["xf"]
-                # J_scen += Fk["qf"]
+                J_scen += Fk["qf"]
 
-                J_scen += self.add_stage_cost(scenario, k)
+                # J_scen += self.add_stage_cost(scenario, k)
                 eq_con = [
                     Xk_end - self.s[scenario, "states", k + 1],
                     -self.s[scenario, "inputs", k, "Pbc"]
@@ -221,7 +220,7 @@ class ScenarioOCP:
                 lbg += [0] * len(eq_con)
                 ubg += [0] * len(eq_con)
 
-            J += self.s_data[scenario, "data", k, "prob"] * J_scen
+            J += J_scen
 
         # Non-anticipativity constraints
         if root:
@@ -280,8 +279,6 @@ class ScenarioOCP:
             self.solver = nlpsol("solver", "ipopt", prob, opts)
 
         return [s0, lbs, ubs, lbg, ubg]
-
-        return root
 
     def solve_nlp(self, params, data):
         # Solve the NLP

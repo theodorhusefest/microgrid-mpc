@@ -20,6 +20,7 @@ def nominel_mpc():
     """
     Main function for mpc-scheme with receding horizion.
     """
+    np.random.seed(1)
     conf = utils.parse_config()
     datafile = conf["datafile"]
     loads_trainfile = conf["loads_trainfile"]
@@ -46,7 +47,7 @@ def nominel_mpc():
 
     # Get data
     observations = pd.read_csv(datafile, parse_dates=["date"])
-    # observations = observations[observations["date"] >= datetime(2021, 3, 11)]
+    observations = observations[observations["date"] >= datetime(2021, 3, 13)]
     solcast_forecasts = pd.read_csv(
         conf["solcast_file"], parse_dates=["time", "collected"]
     )
@@ -57,7 +58,10 @@ def nominel_mpc():
         solcast_forecasts["collected"] == current_time - timedelta(minutes=60)
     ]
 
-    obs = observations[observations["date"] == current_time]
+    obs = observations[
+        (observations["date"] >= current_time)
+        & (observations["date"] <= current_time + timedelta(minutes=10 * N))
+    ]
 
     l = Load(N, loads_trainfile, "L", groundtruth=observations["L"])
     E = np.ones(2000)  # get_spot_price()
@@ -77,7 +81,8 @@ def nominel_mpc():
     sys_metrics = metrics.SystemMetrics()
 
     x, lbx, ubx, lbg, ubg = ocp.build_nlp()
-
+    fig1, ax1 = plt.subplots()
+    fig2, ax2 = plt.subplots()
     for step in range(simulation_horizon - N):
 
         # Get measurements
@@ -102,18 +107,18 @@ def nominel_mpc():
                 forecast = new_forecast
 
         ref = forecast[
-            (forecast["time"] >= current_time)
-            & (forecast["time"] < current_time + timedelta(minutes=10 * (N + 1)))
+            (forecast["time"] > current_time)
+            & (forecast["time"] <= current_time + timedelta(minutes=10 * (N)))
         ]
 
         # Create predictions for next period
         if perfect_predictions:
-            pv_ref = pv[step + 1 : step + N + 1]
-            l1_ref = l1.perfect_pred(step)
+            pv_ref = obs["PV"].values[1:] + np.random.normal(0, 0.2, N)
+            l_ref = obs["L"].values[1:] + np.random.normal(0, 0.2, N)
             E_ref = E[step : step + N]
         else:
             pv_ref = PV.predict(ref.temp.values, ref.GHI.values)
-            l_ref = l.scaled_mean_pred(l_true, step % 126)
+            l_ref = l.scaled_mean_pred(l_true, step % 126)[1:]
             E_ref = E[step : step + N]
 
         forecasts = ocp.update_forecasts(pv_ref, l_ref, E_ref)
@@ -122,7 +127,15 @@ def nominel_mpc():
 
         # Simulate the system after disturbances
         current_time += timedelta(minutes=10)
-        obs = observations[observations["date"] == current_time]
+        obs = observations[
+            (observations["date"] >= current_time)
+            & (observations["date"] <= current_time + timedelta(minutes=10 * N))
+        ]
+
+        ax1.plot(range(step, step + N + 1), obs["L"], color="blue")
+        ax1.plot(range(step + 1, step + N + 1), l_ref, color="red")
+        ax2.plot(range(step, step + N + 1), obs["PV"], color="blue")
+        ax2.plot(range(step + 1, step + N + 1), pv_ref, color="red")
 
         e, uk = utils.calculate_real_u(
             xk_opt, Uk_opt, obs["PV"].values[0], obs["L"].values[0]
@@ -151,25 +164,23 @@ def nominel_mpc():
     u = np.asarray(
         [np.asarray(Pbc) - np.asarray(Pbd), np.asarray(Pgb) - np.asarray(Pgs)]
     )
-    if openloop:
-        p.plot_control_actions(
-            np.asarray([ocp.Pbc - ocp.Pbd, ocp.Pgb - ocp.Pgb]),
-            horizon - T,
-            actions_per_hour,
-            logpath,
-            legends=["Battery", "Grid"],
-            title="Optimal Control Actions",
-        )
+    p.plot_control_actions(
+        np.asarray([ocp.Pbc - ocp.Pbd, ocp.Pgb - ocp.Pgs]),
+        horizon - T,
+        actions_per_hour,
+        logpath,
+        legends=["Battery", "Grid"],
+        title="Optimal Control Actions",
+    )
 
-    else:
-        p.plot_control_actions(
-            u,
-            horizon - T,
-            actions_per_hour,
-            logpath,
-            legends=["Battery", "Grid"],
-            title="Simulated Control Actions",
-        )
+    p.plot_control_actions(
+        u,
+        horizon - T,
+        actions_per_hour,
+        logpath,
+        legends=["Battery", "Grid"],
+        title="Simulated Control Actions",
+    )
 
     p.plot_data(
         np.asarray([B.x_sim, B.x_opt]),

@@ -1,7 +1,7 @@
-simulation_horizon: 60 # hours
+simulation_horizon: 24 # hours
 prediction_horizon: 3 # hours
-robust_horizon: 4 # steps
-branch_factor: 2
+robust_horizon: 2 # steps
+branch_factor: 3
 
 actions_per_hour: 6
 logpath: "./logs/"
@@ -9,7 +9,7 @@ datafile: "./data/09.03_cleaned.csv"
 loads_trainfile: "./data/09.03_cleaned.csv"
 solcast_file: "./data/solcast_cleaned.csv"
 openloop: False
-perfect_predictions: False
+perfect_predictions: True
 
 battery:
   x_initial: 0.88
@@ -19,7 +19,7 @@ battery:
 system:
   C_MAX: 1000
   nb_c: 0.913724
-  nb_d: 0.913724
+  nb_d: 0.87
   x_min: 0.3
   x_max: 0.9
   x_ref: 0.7

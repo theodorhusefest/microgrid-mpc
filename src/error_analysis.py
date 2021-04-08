@@ -11,16 +11,17 @@ from statsmodels.stats.diagnostic import lilliefors
 
 def load_analysis(data, L, method, plot=True):
     daily_errors = []
-    for day, day_df in data.groupby(data.date.dt.day):
-        daily_errors.append(calculate_daily_error(L, day_df[L.column], method))
+    for _, day_df in data.groupby(data.date.dt.day):
+        daily_errors.append(load_calculate_daily_error(L, day_df[L.column], method))
 
     daily_errors = np.asarray(daily_errors)
 
     error_df = pd.DataFrame()
     for step in range(daily_errors.shape[2]):
         step_err = daily_errors[:, :, step].flatten()
-        error_df[step + 1] = step_err
+        error_df[step] = step_err
 
+    print(error_df.shape)
     if plot:
         print("*" * 100)
         print(
@@ -36,7 +37,7 @@ def load_analysis(data, L, method, plot=True):
             "Lilliefors test-statistic:",
             lilliefors(daily_errors.flatten(), dist="norm")[1],
         )
-        estimate_rmse(error_df)
+        print_rmse(error_df)
         plot_predictions(L, method)
         plot_boxplot(error_df, method.__name__)
         plot_daily_errors(daily_errors, method.__name__)
@@ -50,34 +51,64 @@ def pv_analysis(N, pv, data, forecasts, plot=True):
     """
     Calculates the error between prediction and observed production
     """
-    daily_errors = []
-    for (year, month, day, hour), day_df in forecasts.groupby(
-        [
-            forecasts.collected.dt.year,
-            forecasts.collected.dt.month,
-            forecasts.collected.dt.day,
-            forecasts.collected.dt.hour,
-        ]
-    ):
-        forecast = day_df.iloc[0:N]
-        if forecast.shape[0] < N:
-            break
-        df = pd.merge(
-            forecast,
-            data,
-            left_on="time",
-            right_on="date",
-            suffixes=("_forecast", "_obs"),
+    error_df = pd.DataFrame()
+    forecast = forecasts[
+        forecasts["collected"] == data.date.iloc[0] - timedelta(minutes=60)
+    ]
+
+    for i in range(data.shape[0]):
+        current_time = data.date[i]
+        if current_time.minute == 30:
+            new_forecast = forecasts[
+                forecasts["collected"] == current_time - timedelta(minutes=30)
+            ]
+            if new_forecast.empty:
+                print("Could not find forecast, using old forecast")
+            else:
+                forecast = new_forecast
+
+        df = (
+            pd.merge(
+                forecast,
+                data,
+                left_on="time",
+                right_on="date",
+                suffixes=("_forecast", "_obs"),
+            )
+            .fillna(0)
+            .iloc[:N]
         )
+
+        # df["PV_pred"] = pv.predict(df.airTemp.values, df.GHI_forecast.values)
         df["PV_pred"] = pv.predict(df.temp.values, df.GHI_obs.values)
+        error = df["PV_pred"] - df["PV"]
+        error = np.divide(
+            error, df["PV"], out=np.zeros_like(error), where=df["PV"] != 0
+        )
+        error_df[i] = error
+    error_df = error_df.transpose()
 
-        plt.plot(df["time"], df["PV"], color="red")
-        plt.plot(df["time"], df["PV_pred"], color="blue")
+    if plot:
+        print("****** PV statistics ******")
+        print(error_df.describe())
+        print("\n" + "*" * 30 + " Lilliefors " + "*" * 30)
+        print(
+            "Lilliefors test-statistic:",
+            lilliefors(error_df.values.flatten(), dist="norm")[1],
+        )
+        print_rmse(error_df)
+        plot_boxplot(error_df, "PV")
+        # plot_daily_errors(error_df.values, "PV")
+        plot_error_hist(error_df.values, "PV")
+        plt.show()
 
-    plt.show()
+    return error_df
 
 
 def plot_predictions(L, method):
+    """
+    If groundtruth is provided to L, predictions can be plotted
+    """
     plt.figure(figsize=(10, 5))
     for step in range(L.mean.shape[0] - L.N):
         plt.plot(
@@ -91,29 +122,29 @@ def plot_predictions(L, method):
     plt.ylabel("Power [kW]")
 
 
-def estimate_rmse(error_df):
-    def rmse(error):
-        return np.sqrt(np.power(error, 2).mean())
-
-    print("RMSE total: ", rmse(error_df.values))
-    for i in range(error_df.shape[1]):
-        print(
-            "RMSE at prediction step {}: {}".format(
-                i, np.around(rmse(error_df[i + 1].values), 2)
-            )
-        )
-
-
-def calculate_daily_error(L, groundtruth, method):
+def load_calculate_daily_error(L, day_load, method):
+    """
+    Calulates the errors for a given day
+    """
     errors = []
-    for step in range(groundtruth.shape[0] - L.N):
-        gt = groundtruth.iloc[step : step + L.N + 1].values
-        pred = method(gt[0], step)
+    for step in range(day_load.shape[0] - L.N):
+        gt = day_load.iloc[step : step + L.N + 1].values[1:]
+        pred = method(gt[0], step)[1:]
         errors.append((pred - gt) / gt[1])
     return np.asarray(errors)
 
 
+def print_rmse(error_df):
+    """
+    Prints the Root mean square error of a dataframe
+    """
+    print("RMSE total: ", np.sqrt(np.power(error_df.values, 2).mean()))
+
+
 def plot_boxplot(df, name):
+    """
+    Plots a boxplot of the prediction errors at each timestep
+    """
     ax = df.plot.box(figsize=(10, 5))
     ax.set_xlabel("Prediction step")
     ax.set_ylabel("Error")
@@ -121,12 +152,18 @@ def plot_boxplot(df, name):
 
 
 def plot_error_hist(errors, name):
+    """
+    Plots a histrogram of all errors
+    """
     plt.figure(figsize=(10, 5))
     plt.hist(errors.flatten(), bins=100)
     plt.title("{} - Error distribution".format(name))
 
 
 def plot_daily_errors(daily_errors, name):
+    """
+    Plots errors at the correct timesteps
+    """
     daily_mean = daily_errors.mean(axis=0)
     plt.figure(figsize=(10, 5))
     for i in range(daily_mean.shape[0]):
@@ -136,30 +173,40 @@ def plot_daily_errors(daily_errors, name):
     plt.ylabel("Error")
 
 
-if __name__ == "__main__":
-    N = 18
-    # L = Load(N, "./data/loads_train.csv", "L2", groundtruth="./data/load_PV3.csv")
-    # test_data = pd.read_csv("./data/data_oct20.csv", parse_dates=["date"]).iloc[::10]
+def create_error_csv(N, train_file, test_file, forecast_file, stopdate=None):
+    """
+    Calculates and saves load and pv errors to a csv.
+    """
 
-    # load_analysis(test_data, L, L.scaled_mean_pred)
-    # load_analysis(test_data, L, L.constant_pred)
+    if not stopdate:
+        stopdate = datetime(2100, 12, 30)
+    L = Load(N, train_file, "L")
+    test_data = pd.read_csv(test_file, parse_dates=["date"])
 
-    # Get data
-    observations = pd.read_csv("./data/09.03_cleaned.csv", parse_dates=["date"])
-    # observations = observations[observations["date"] >= datetime(2021, 3, 11)]
-    solcast_forecasts = pd.read_csv(
-        "./data/solcast_cleaned.csv", parse_dates=["time", "collected"]
-    )
+    load_errors = load_analysis(test_data, L, L.scaled_mean_pred, plot=False)
+
+    observations = pd.read_csv(train_file, parse_dates=["date"])
+    solcast_forecasts = pd.read_csv(forecast_file, parse_dates=["time", "collected"])
     solcast_forecasts = solcast_forecasts[
         (solcast_forecasts["collected"] >= observations.date.iloc[0])
-        & (solcast_forecasts["time"] < datetime(2021, 3, 11))
+        & (solcast_forecasts["time"] < stopdate)
     ]
-    pv_analysis(
+    pv_errors = pv_analysis(
         N,
-        Photovoltaic(
-            Pm=800,
-            Voc=100,
-        ),
+        Photovoltaic(),
         observations,
         solcast_forecasts,
+        plot=False,
+    )
+
+    pv_errors.to_csv("./data/pv_errors.csv")
+    load_errors.to_csv("./data/load_errors.csv")
+
+
+if __name__ == "__main__":
+    create_error_csv(
+        18,
+        "./data/8.4_train.csv",
+        "./data/8.4_test.csv",
+        "./data/solcast_cleaned.csv",
     )
