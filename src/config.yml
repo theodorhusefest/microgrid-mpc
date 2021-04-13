@@ -1,15 +1,16 @@
-simulation_horizon: 24 # hours
-prediction_horizon: 3 # hours
+mpc: scenario # nominel or scenario
+simulation_horizon: 24  # hours
+prediction_horizon: 2 # hours
 robust_horizon: 2 # steps
-branch_factor: 3
+branch_factor: 2
 
 actions_per_hour: 6
 logpath: "./logs/"
-datafile: "./data/09.03_cleaned.csv"
-loads_trainfile: "./data/09.03_cleaned.csv"
+testfile: "./data/8.4_test.csv"
+trainfile: "./data/8.4_train.csv"
 solcast_file: "./data/solcast_cleaned.csv"
 openloop: False
-perfect_predictions: True
+perfect_predictions: False
 
 battery:
   x_initial: 0.88
@@ -26,6 +27,6 @@ system:
   Pb_max: 1000
   Pg_max: 1000
   battery_cost: 0.128
-  grid_cost: 2
-  ref_cost: 100
+  grid_cost: 0.128
+  ref_cost: 25
   verbose: False

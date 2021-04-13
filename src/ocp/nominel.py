@@ -1,6 +1,7 @@
 from casadi import *
 from casadi.tools import *
 from utils.helpers import parse_config
+import matplotlib.pyplot as plt
 
 
 class NominelMPC:
@@ -35,14 +36,20 @@ class NominelMPC:
             ]
         )
 
+        self.slacks = struct_symSX([entry("us"), entry("ls"), entry("s1"), entry("s2")])
+
         self.w = struct_symSX(
             [
                 entry("states", struct=self.states, repeat=self.N),
                 entry("inputs", struct=self.inputs, repeat=self.N - 1),
+                entry("slacks", struct=self.slacks, repeat=self.N),
             ]
         )
         self.data = struct_symSX([entry("pv"), entry("l"), entry("E")])
         self.all_data = struct_symSX([entry("data", struct=self.data, repeat=self.N)])
+
+        self.us = SX.sym("us")
+        self.ls = SX.sym("ls")
 
         self.E = SX.sym("E", self.N)
 
@@ -97,7 +104,7 @@ class NominelMPC:
 
         return (
             self.battery_cost * (self.inputs["Pbc"] + self.inputs["Pbd"])
-            + e_spot * (self.inputs["Pgb"] - self.inputs["Pgs"])
+            + e_spot * (self.inputs["Pgb"] - 0.9 * self.inputs["Pgs"])
             + self.grid_cost * (self.inputs["Pgb"] + self.inputs["Pgs"]) ** 2
             + 100 * self.inputs["Pbc"] * self.inputs["Pbd"]
             + 100 * self.inputs["Pgb"] * self.inputs["Pgs"]
@@ -135,52 +142,76 @@ class NominelMPC:
 
         lbw = self.w(0)
         ubw = self.w(0)
-        lbw["states", :, "SOC"] = self.x_min
-        ubw["states", :, "SOC"] = self.x_max
+        lbw["states", :, "SOC"] = 0
+        ubw["states", :, "SOC"] = 1
         ubw["inputs", :, "Pbc"] = self.Pb_max
         ubw["inputs", :, "Pbd"] = self.Pb_max
         ubw["inputs", :, "Pgs"] = self.Pg_max
         ubw["inputs", :, "Pgb"] = self.Pg_max
+        ubw["slacks", :, "us"] = inf
+        ubw["slacks", :, "ls"] = inf
+        ubw["slacks", :, "s1"] = inf
+        ubw["slacks", :, "s2"] = inf
 
         w0 = self.w(0)
         g = []
         lbg = []
         ubg = []
 
-        F = self.build_integrator(0.50)
+        F = self.build_integrator(1)
 
         for k in range(self.N - 1):
 
             states_k = self.w["states", k]
             inputs_k = self.w["inputs", k]
-            data_k = self.all_data["data", k]
 
             # System dynamics
             Fk = F(x0=states_k, p=inputs_k)
             Xk_end = Fk["xf"]
-            J += Fk["qf"]
+            # J += Fk["qf"]
+
             # Stage costs
-            # J += self.battery_cost * (
-            #    self.w["inputs", k, "Pbc"] * self.w["inputs", k, "Pbd"]
-            # )
-            # J += self.all_data["data", k, "E"] * (self.w["inputs", k, "Pgb"])
-            # J += (
-            #    self.grid_cost
-            #    * (self.w["inputs", k, "Pgb"] + self.w["inputs", k, "Pgs"]) ** 2
-            # )
+            J += self.battery_cost * (
+                self.w["inputs", k, "Pbc"] + self.w["inputs", k, "Pbd"]
+            )
+            J += self.grid_cost * (
+                (self.w["inputs", k, "Pgb"] + self.w["inputs", k, "Pgs"]) ** 2
+            )
+            J += self.all_data["data", k, "E"] * (
+                (self.w["inputs", k, "Pgb"] - 0.7 * self.w["inputs", k, "Pgs"])
+            )
+            J += 1000 * (self.w["inputs", k, "Pbc"] * self.w["inputs", k, "Pbd"])
+            J += 1000 * (self.w["inputs", k, "Pgb"] * self.w["inputs", k, "Pgs"])
+            J += 1000 * (self.w["slacks", k, "us"] * 10) ** 2
+            J += 1000 * (self.w["slacks", k, "ls"] * 10) ** 2
+
+            if k == self.N - 2:
+                J += (
+                    self.ref_cost
+                    * ((self.x_ref - self.w["states", k, "SOC"]) * 100) ** 2
+                )
 
             # Equality Contraints
-            g += [Xk_end - self.w["states", k + 1]]
-            g += [
+            eq_con = [
+                Xk_end - self.w["states", k + 1],
                 -self.w["inputs", k, "Pbc"]
                 + self.w["inputs", k, "Pbd"]
                 + self.w["inputs", k, "Pgb"]
                 - self.w["inputs", k, "Pgs"]
                 + self.all_data["data", k, "pv"]
-                - self.all_data["data", k, "l"]
+                - self.all_data["data", k, "l"],
+                self.w["states", k, "SOC"]
+                - self.w["slacks", k, "us"]
+                + self.w["slacks", k, "s2"]
+                - self.x_max,
+                self.w["states", k, "SOC"]
+                + self.w["slacks", k, "ls"]
+                - self.w["slacks", k, "s1"]
+                - self.x_min,
             ]
-            lbg += [0] * (Xk_end.size(1) + 1)
-            ubg += [0] * (Xk_end.size(1) + 1)
+            g += eq_con
+            lbg += [0] * len(eq_con)
+            ubg += [0] * len(eq_con)
 
         prob = {"f": J, "x": self.w, "g": vertcat(*g), "p": self.all_data}
         if self.verbose:

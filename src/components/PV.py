@@ -1,6 +1,9 @@
 from casadi import *
 import numpy as np
 import pandas as pd
+from sklearn import linear_model
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error, mean_absolute_error
 
 
 class Photovoltaic:
@@ -139,6 +142,40 @@ class Photovoltaic:
 
         assert len(T) == len(G)
         return np.asarray([self.solve_prob(T[i], G[i]) for i in range(len(T))])
+
+
+class LinearPhotovoltaic:
+    def __init__(self, train_file):
+        self.train_file = train_file
+
+        self.train = (
+            pd.read_csv(train_file, parse_dates=["date"]).set_index("date").fillna(0)
+        )
+
+        X = self.train.filter(["airTemp", "GHI"])
+        y = self.train.filter(["PV"])
+
+        X_train, X_val, y_train, y_val = train_test_split(
+            X, y, test_size=0.1, shuffle=False
+        )
+
+        self.model = linear_model.LinearRegression()
+        self.model.fit(X_train, y_train)
+
+        y_pred = self.model.predict(X_val)
+
+        print(
+            "\nSuccessfully initilized linear PV model with RMSE {} on validation set.".format(
+                np.sqrt(mean_squared_error(y_val, y_pred))
+            )
+        )
+
+    def predict(self, temp, GHI, measurement=None):
+        pred = self.model.predict(np.c_[temp, GHI]).flatten()
+        pred = np.clip(pred, 0, np.inf)
+        if np.min(pred) > 1 and measurement:
+            pred = (measurement / pred[0]) * pred
+        return pred
 
 
 if __name__ == "__main__":

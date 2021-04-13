@@ -10,7 +10,7 @@ from pprint import pprint
 from datetime import datetime, timedelta
 
 from components.spot_price import get_spot_price
-from components.PV import Photovoltaic
+from components.PV import Photovoltaic, LinearPhotovoltaic
 from ocp.nominel import NominelMPC
 from components.loads import Load
 from components.battery import Battery
@@ -22,8 +22,8 @@ def nominel_mpc():
     """
     np.random.seed(1)
     conf = utils.parse_config()
-    datafile = conf["datafile"]
-    loads_trainfile = conf["loads_trainfile"]
+    testfile = conf["testfile"]
+    trainfile = conf["trainfile"]
 
     logpath = None
     log = input("Log this run? ")
@@ -46,14 +46,14 @@ def nominel_mpc():
     step_time = start_time
 
     # Get data
-    observations = pd.read_csv(datafile, parse_dates=["date"])
-    observations = observations[observations["date"] >= datetime(2021, 3, 13)]
+    observations = pd.read_csv(testfile, parse_dates=["date"])
+    observations = observations[observations["date"] >= datetime(2021, 4, 2)]
     solcast_forecasts = pd.read_csv(
         conf["solcast_file"], parse_dates=["time", "collected"]
     )
 
     current_time = observations.date.iloc[0]
-
+    print("Starting simulation at ", current_time)
     forecast = solcast_forecasts[
         solcast_forecasts["collected"] == current_time - timedelta(minutes=60)
     ]
@@ -63,10 +63,10 @@ def nominel_mpc():
         & (observations["date"] <= current_time + timedelta(minutes=10 * N))
     ]
 
-    l = Load(N, loads_trainfile, "L", groundtruth=observations["L"])
+    l = Load(N, trainfile, "L", groundtruth=observations["L"])
     E = np.ones(2000)  # get_spot_price()
     B = Battery(T, N, **conf["battery"])
-    PV = Photovoltaic()
+    PV = LinearPhotovoltaic(trainfile)
 
     Pbc = []
     Pbd = []
@@ -76,6 +76,8 @@ def nominel_mpc():
     pv_measured = []
     l_measured = []
     errors = []
+
+    c_violation = 0
 
     ocp = NominelMPC(T, N)
     sys_metrics = metrics.SystemMetrics()
@@ -113,8 +115,8 @@ def nominel_mpc():
 
         # Create predictions for next period
         if perfect_predictions:
-            pv_ref = obs["PV"].values[1:] + np.random.normal(0, 0.2, N)
-            l_ref = obs["L"].values[1:] + np.random.normal(0, 0.2, N)
+            pv_ref = obs["PV"].values[1:]
+            l_ref = obs["L"].values[1:]
             E_ref = E[step : step + N]
         else:
             pv_ref = PV.predict(ref.temp.values, ref.GHI.values)
@@ -123,7 +125,7 @@ def nominel_mpc():
 
         forecasts = ocp.update_forecasts(pv_ref, l_ref, E_ref)
 
-        xk_opt, Uk_opt = ocp.solve_nlp([x, lbx, ubx, lbg, ubg], forecasts)
+        xk_opt, Uk_opt = ocp.solve_nlp([x, lbx, ubx, lbg, ubg], forecasts, step)
 
         # Simulate the system after disturbances
         current_time += timedelta(minutes=10)
@@ -149,6 +151,10 @@ def nominel_mpc():
 
         B.simulate_SOC(xk_opt, [uk[0], uk[1]])
 
+        if xk_opt < 0.3 or xk_opt > 0.9:
+            print("SOC constraint violation")
+            c_violation += 1
+
         sys_metrics.update_metrics(
             [Pbc[step], Pbd[step], Pgb[step], Pgs[step]], E[step], e
         )
@@ -158,7 +164,8 @@ def nominel_mpc():
 
     sys_metrics.calculate_consumption_rate(Pgs, pv_measured)
     sys_metrics.calculate_dependency_rate(Pgb, l_measured)
-    sys_metrics.print_metrics()
+    sys_metrics.print_metrics(B.get_SOC(openloop))
+    print("Constraint violations:", c_violation)
 
     # Plotting
     u = np.asarray(
@@ -186,20 +193,26 @@ def nominel_mpc():
         np.asarray([B.x_sim, B.x_opt]),
         title="State of charge",
         legends=["SOC", "SOC_opt"],
+        logpath=logpath,
     )
 
-    p.plot_data([np.asarray(errors)], title="Errors")
+    p.plot_data([np.asarray(errors)], title="Errors", logpath=logpath)
 
     p.plot_data(
-        np.asarray([pv_measured, l_measured]), title="PV & Load", legends=["PV", "L"]
+        np.asarray([pv_measured, l_measured]),
+        title="PV & Load",
+        legends=["PV", "L"],
+        logpath=logpath,
     )
 
-    # p.plot_data(np.asarray([E]), title="Spot Prices", legends=["Spotprice"])
+    # p.plot_data(np.asarray([E]), title="Spot Prices", legends=["Spotprice"],logpath=logpath)
 
     stop = time.time()
     print("\nFinished optimation in {}s".format(np.around(stop - start_time, 2)))
 
-    plt.ion()
+    if logpath:
+        fig1.savefig("{}-{}".format(logpath, "pv_forecast" + ".eps"), format="eps")
+        fig2.savefig("{}-{}".format(logpath, "load_forecast" + ".eps"), format="eps")
     if True:
         plt.show(block=True)
 

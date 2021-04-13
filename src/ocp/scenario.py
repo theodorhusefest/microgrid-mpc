@@ -36,17 +36,18 @@ class ScenarioOCP:
                 entry("Pgs"),
             ]
         )
+        self.slacks = struct_symSX([entry("us"), entry("ls"), entry("s1"), entry("s2")])
 
         self.w = struct_symSX(
             [
                 entry("states", struct=self.states, repeat=self.N),
                 entry("inputs", struct=self.inputs, repeat=self.N - 1),
+                entry("slacks", struct=self.slacks, repeat=self.N),
             ]
         )
         self.data = struct_symSX([entry("pv"), entry("l"), entry("E"), entry("prob")])
         self.all_data = struct_symSX([entry("data", struct=self.data, repeat=self.N)])
 
-        self.scenario = struct_symSX([entry("w", struct=self.w)])
         scenarios = []
         s_data = []
 
@@ -110,10 +111,10 @@ class ScenarioOCP:
 
         return (
             self.battery_cost * (self.inputs["Pbc"] + self.inputs["Pbd"])
-            + e_spot * (self.inputs["Pgb"] - self.inputs["Pgs"])
+            + e_spot * (self.inputs["Pgb"] - 0.9 * self.inputs["Pgs"])
             + self.grid_cost * (self.inputs["Pgb"] + self.inputs["Pgs"]) ** 2
-            + 100000 * self.inputs["Pbc"] * self.inputs["Pbd"]
-            + 100000 * self.inputs["Pgb"] * self.inputs["Pgs"]
+            + 100 * self.inputs["Pbc"] * self.inputs["Pbd"]
+            + 100 * self.inputs["Pgb"] * self.inputs["Pgs"]
             + self.ref_cost * ((self.x_ref - self.states["SOC"]) * 100) ** 2
         )
 
@@ -147,10 +148,6 @@ class ScenarioOCP:
         J_scen += self.battery_cost * (
             self.s[scenario, "inputs", k, "Pbc"] + self.s[scenario, "inputs", k, "Pbd"]
         )
-        J_scen += 1 * (
-            self.s[scenario, "inputs", k, "Pgb"]
-            - 0.7 * self.s[scenario, "inputs", k, "Pgs"]
-        )
         J_scen += (
             self.grid_cost
             * (
@@ -159,20 +156,24 @@ class ScenarioOCP:
             )
             ** 2
         )
-        J_scen += (
-            100
-            * self.s[scenario, "inputs", k, "Pbc"]
-            * self.s[scenario, "inputs", k, "Pbd"]
+        J_scen += 1 * (
+            self.s[scenario, "inputs", k, "Pgb"]
+            - 0.7 * self.s[scenario, "inputs", k, "Pgs"]
         )
-        J_scen += (
-            100
-            * self.s[scenario, "inputs", k, "Pgb"]
-            * self.s[scenario, "inputs", k, "Pgs"]
+        J_scen += 1000 * (
+            self.s[scenario, "inputs", k, "Pbc"] * self.s[scenario, "inputs", k, "Pbd"]
         )
-        J_scen += (
-            self.ref_cost
-            * ((self.x_ref - self.s[scenario, "states", k, "SOC"]) * 100) ** 2
+        J_scen += 1000 * (
+            self.s[scenario, "inputs", k, "Pgb"] * self.s[scenario, "inputs", k, "Pgs"]
         )
+
+        J_scen += 1000 * (self.s[scenario, "slacks", k, "us"] * 10) ** 2
+        J_scen += 1000 * (self.s[scenario, "slacks", k, "ls"] * 10) ** 2
+        if k == self.N - 2:
+            J_scen += (
+                self.ref_cost
+                * ((self.x_ref - self.s[scenario, "states", k, "SOC"]) * 100) ** 2
+            )
         return J_scen
 
     def build_scenario_ocp(self, root=None):
@@ -185,18 +186,23 @@ class ScenarioOCP:
         lbg = []
         ubg = []
 
-        F = self.build_integrator(0.50)
+        F = self.build_integrator(1)
 
         for j in range(self.N_scenarios):
             J_scen = 0
             scenario = "scenario" + str(j)
 
-            lbs[scenario, "states", :, "SOC"] = self.x_min
-            ubs[scenario, "states", :, "SOC"] = self.x_max
+            lbs[scenario, "states", :, "SOC"] = 0
+            ubs[scenario, "states", :, "SOC"] = 1
             ubs[scenario, "inputs", :, "Pbc"] = self.Pb_max
             ubs[scenario, "inputs", :, "Pbd"] = self.Pb_max
             ubs[scenario, "inputs", :, "Pgs"] = self.Pg_max
             ubs[scenario, "inputs", :, "Pgb"] = self.Pg_max
+
+            ubs[scenario, "slacks", :, "us"] = inf
+            ubs[scenario, "slacks", :, "ls"] = inf
+            ubs[scenario, "slacks", :, "s1"] = inf
+            ubs[scenario, "slacks", :, "s2"] = inf
 
             for k in range(self.N - 1):
                 states_k = self.s[scenario, "states", k]
@@ -204,9 +210,9 @@ class ScenarioOCP:
 
                 Fk = F(x0=states_k, p=inputs_k)
                 Xk_end = Fk["xf"]
-                J_scen += Fk["qf"]
+                # J_scen += Fk["qf"]
 
-                # J_scen += self.add_stage_cost(scenario, k)
+                J_scen += self.add_stage_cost(scenario, k)
                 eq_con = [
                     Xk_end - self.s[scenario, "states", k + 1],
                     -self.s[scenario, "inputs", k, "Pbc"]
@@ -215,6 +221,14 @@ class ScenarioOCP:
                     - self.s[scenario, "inputs", k, "Pgs"]
                     + self.s_data[scenario, "data", k, "pv"]
                     - self.s_data[scenario, "data", k, "l"],
+                    self.s[scenario, "states", k, "SOC"]
+                    - self.s[scenario, "slacks", k, "us"]
+                    + self.s[scenario, "slacks", k, "s2"]
+                    - self.x_max,
+                    self.s[scenario, "states", k, "SOC"]
+                    + self.s[scenario, "slacks", k, "ls"]
+                    - self.s[scenario, "slacks", k, "s1"]
+                    - self.x_min,
                 ]
                 g += eq_con
                 lbg += [0] * len(eq_con)
@@ -300,7 +314,3 @@ class ScenarioOCP:
         self.Pgs = np.append(self.Pgs, s_opt["scenario" + str(0), "inputs", 0, "Pgs"])
 
         return self.get_SOC_opt(), self.get_u_opt()
-
-
-if __name__ == "__main__":
-    ocp = NominelMPC(1, 6)

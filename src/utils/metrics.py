@@ -58,13 +58,14 @@ class SystemMetrics:
         self.grid_max = np.max([self.grid_max, U[2]])
         self.accumulated_error += np.abs(e)
 
-    def print_metrics(self):
+    def print_metrics(self, SOC):
         """
         Prints the metrics
         """
 
         print("\nMETRICS")
         print("-" * 100)
+        print("Final SOC: {}%".format(np.around(SOC, 2)))
         print("Grid Cost: {}".format(self.grid_cost))
         print("Battery Cost: {}".format(self.battery_cost))
         print("Max drawn from grid: {}".format(self.grid_max))

@@ -24,12 +24,12 @@ def create_logs_folder(rootdir="./logs/", foldername=""):
     now = datetime.now()
     time = now.strftime("%d.%m-%H:%M")
     folderpath = rootdir + time + "-" + foldername + "/"
-    create_folder(folderpath)
-
+    if not os.path.exists(folderpath):
+        os.makedirs(folderpath)
     # Save files in logs
-    files = ["./config.yml", "./main.py", "./solver.py"]
-    for f in files:
-        shutil.copyfile(f, folderpath + f)
+    files = ["/config.yml", "/nominel_mpc.py", "/scenario_mpc.py"]
+    # for f in files:
+    #    shutil.copyfile(f, folderpath + f)
     return folderpath
 
 

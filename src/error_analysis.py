@@ -1,3 +1,4 @@
+import time
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -5,7 +6,7 @@ import seaborn as sn
 from datetime import datetime, timedelta
 
 from components.loads import Load
-from components.PV import Photovoltaic
+from components.PV import Photovoltaic, LinearPhotovoltaic
 from statsmodels.stats.diagnostic import lilliefors
 
 
@@ -21,7 +22,11 @@ def load_analysis(data, L, method, plot=True):
         step_err = daily_errors[:, :, step].flatten()
         error_df[step] = step_err
 
-    print(error_df.shape)
+    error_df = error_df[
+        (error_df < np.percentile(error_df, 95))
+        & (error_df > np.percentile(error_df, 5))
+    ]
+
     if plot:
         print("*" * 100)
         print(
@@ -38,7 +43,7 @@ def load_analysis(data, L, method, plot=True):
             lilliefors(daily_errors.flatten(), dist="norm")[1],
         )
         print_rmse(error_df)
-        plot_predictions(L, method)
+        # plot_predictions(L, method)
         plot_boxplot(error_df, method.__name__)
         plot_daily_errors(daily_errors, method.__name__)
         plot_error_hist(daily_errors, method.__name__)
@@ -56,7 +61,7 @@ def pv_analysis(N, pv, data, forecasts, plot=True):
         forecasts["collected"] == data.date.iloc[0] - timedelta(minutes=60)
     ]
 
-    for i in range(data.shape[0]):
+    for i in range(data.shape[0] - N):
         current_time = data.date[i]
         if current_time.minute == 30:
             new_forecast = forecasts[
@@ -78,16 +83,23 @@ def pv_analysis(N, pv, data, forecasts, plot=True):
             .fillna(0)
             .iloc[:N]
         )
-
-        # df["PV_pred"] = pv.predict(df.airTemp.values, df.GHI_forecast.values)
-        df["PV_pred"] = pv.predict(df.temp.values, df.GHI_obs.values)
-        error = df["PV_pred"] - df["PV"]
-        error = np.divide(
-            error, df["PV"], out=np.zeros_like(error), where=df["PV"] != 0
-        )
+        # df = df.set_index("time")
+        measurement = data[data.date == current_time]["PV"].iloc[0]
+        df["PV_pred"] = pv.predict(df.airTemp.values, df.GHI_forecast.values)
+        # df["PV_pred"] = pv.predict(df.temp.values, df.GHI_obs.values)
+        # plt.plot(df.index, df["PV"], color="blue")
+        # plt.plot(df.index, df["PV_pred"], color="red")
+        error = df["PV"] - df["PV_pred"]
+        # error = np.divide(
+        #    error, df["PV"], out=np.zeros_like(error), where=df["PV"] != 0
+        # )
         error_df[i] = error
-    error_df = error_df.transpose()
 
+    error_df = error_df.transpose()
+    error_df = error_df[
+        (error_df < np.percentile(error_df, 95))
+        & (error_df > np.percentile(error_df, 5))
+    ]
     if plot:
         print("****** PV statistics ******")
         print(error_df.describe())
@@ -105,6 +117,19 @@ def pv_analysis(N, pv, data, forecasts, plot=True):
     return error_df
 
 
+def load_calculate_daily_error(L, day_load, method):
+    """
+    Calulates the errors for a given day
+    """
+    errors = []
+    for step in range(day_load.shape[0] - L.N):
+        gt = day_load.iloc[step : step + L.N + 1].values[1:]
+        pred = method(gt[0], step)[1:]
+        error = gt - pred  # / gt[0]
+        errors.append(error)
+    return np.asarray(errors)
+
+
 def plot_predictions(L, method):
     """
     If groundtruth is provided to L, predictions can be plotted
@@ -120,18 +145,6 @@ def plot_predictions(L, method):
     plt.title("{} - Predictions vs groundtruth".format(method.__name__))
     plt.xlabel("Timestep")
     plt.ylabel("Power [kW]")
-
-
-def load_calculate_daily_error(L, day_load, method):
-    """
-    Calulates the errors for a given day
-    """
-    errors = []
-    for step in range(day_load.shape[0] - L.N):
-        gt = day_load.iloc[step : step + L.N + 1].values[1:]
-        pred = method(gt[0], step)[1:]
-        errors.append((pred - gt) / gt[1])
-    return np.asarray(errors)
 
 
 def print_rmse(error_df):
@@ -173,7 +186,7 @@ def plot_daily_errors(daily_errors, name):
     plt.ylabel("Error")
 
 
-def create_error_csv(N, train_file, test_file, forecast_file, stopdate=None):
+def estimate_errors(N, PV, train_file, test_file, forecast_file, stopdate=None):
     """
     Calculates and saves load and pv errors to a csv.
     """
@@ -182,31 +195,40 @@ def create_error_csv(N, train_file, test_file, forecast_file, stopdate=None):
         stopdate = datetime(2100, 12, 30)
     L = Load(N, train_file, "L")
     test_data = pd.read_csv(test_file, parse_dates=["date"])
+    load_errors = load_analysis(test_data, L, L.scaled_mean_pred, plot=True)
 
-    load_errors = load_analysis(test_data, L, L.scaled_mean_pred, plot=False)
+    observations = pd.read_csv(train_file, parse_dates=["date"]).fillna(0)
+    solcast_forecasts = pd.read_csv(
+        forecast_file, parse_dates=["time", "collected"]
+    ).fillna(0)
+    # solcast_forecasts = solcast_forecasts[
+    #    (solcast_forecasts["collected"] >= observations.date.iloc[0])
+    #    & (solcast_forecasts["time"] < stopdate)
+    # ]
 
-    observations = pd.read_csv(train_file, parse_dates=["date"])
-    solcast_forecasts = pd.read_csv(forecast_file, parse_dates=["time", "collected"])
-    solcast_forecasts = solcast_forecasts[
-        (solcast_forecasts["collected"] >= observations.date.iloc[0])
-        & (solcast_forecasts["time"] < stopdate)
-    ]
     pv_errors = pv_analysis(
         N,
-        Photovoltaic(),
+        PV,
         observations,
         solcast_forecasts,
-        plot=False,
+        plot=True,
     )
+
+    pv_errors = pv_errors.loc[~(pv_errors == 0).all(axis=1)]
+    load_errors = load_errors.loc[~(load_errors == 0).all(axis=1)]
 
     pv_errors.to_csv("./data/pv_errors.csv")
     load_errors.to_csv("./data/load_errors.csv")
 
+    return pv_errors, load_errors
+
 
 if __name__ == "__main__":
-    create_error_csv(
+    train_file = "./data/8.4_train.csv"
+    estimate_errors(
         18,
-        "./data/8.4_train.csv",
+        LinearPhotovoltaic("./data/8.4_train.csv"),
         "./data/8.4_test.csv",
+        train_file,
         "./data/solcast_cleaned.csv",
     )

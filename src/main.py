@@ -1,9 +1,10 @@
 import time
+import argparse
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
 import matplotlib.pyplot as plt
-
+from numba import njit
 from datetime import datetime, timedelta
 
 import utils.plots as p
@@ -12,22 +13,29 @@ import utils.helpers as utils
 
 from components.loads import Load
 from ocp.scenario import ScenarioOCP
-from components.PV import Photovoltaic
+from ocp.nominel import NominelMPC
+from components.PV import Photovoltaic, LinearPhotovoltaic
 from components.battery import Battery
 from components.spot_price import get_spot_price
 from utils.scenario_tree import build_scenario_tree, get_scenarios
+from utils.monte_carlo import (
+    monte_carlo_simulations,
+    scenario_reduction,
+    shuffle_dataframe,
+)
 
 
 def scenario_mpc():
     """
     Main function for mpc-scheme with receding horizion.
     """
+
     np.random.seed(1)
 
     conf = utils.parse_config()
-    datafile = conf["datafile"]
-    loads_trainfile = conf["loads_trainfile"]
-    data = pd.read_csv("./data/data_oct20.csv", parse_dates=["date"]).iloc[::10]
+    mpc = conf["mpc"]
+    testfile = conf["testfile"]
+    trainfile = conf["trainfile"]
 
     logpath = None
     log = input("Log this run? ")
@@ -47,20 +55,20 @@ def scenario_mpc():
     N = conf["prediction_horizon"] * actions_per_hour
     Nr = conf["robust_horizon"]
     branch_factor = conf["branch_factor"]
-
     N_scenarios = branch_factor ** Nr
 
     start_time = time.time()
     step_time = start_time
 
     # Get data
-    observations = pd.read_csv(datafile, parse_dates=["date"])
-    observations = observations[observations["date"] >= datetime(2021, 3, 13)]
+    observations = pd.read_csv(testfile, parse_dates=["date"]).fillna(0)
+    observations = observations[observations["date"] >= datetime(2021, 4, 2)]
     solcast_forecasts = pd.read_csv(
         conf["solcast_file"], parse_dates=["time", "collected"]
-    )
+    ).fillna(0)
 
     current_time = observations.date.iloc[0]
+    print("Starting simulation at ", current_time)
 
     forecast = solcast_forecasts[
         solcast_forecasts["collected"] == current_time - timedelta(minutes=60)
@@ -71,10 +79,10 @@ def scenario_mpc():
         & (observations["date"] <= current_time + timedelta(minutes=10 * N))
     ]
 
-    l = Load(N, loads_trainfile, "L", groundtruth=observations["L"])
+    l = Load(N, trainfile, "L", groundtruth=observations["L"])
     E = np.ones(2000)  # get_spot_price()
     B = Battery(T, N, **conf["battery"])
-    PV = Photovoltaic()
+    PV = LinearPhotovoltaic(trainfile)
 
     Pbc = []
     Pbd = []
@@ -84,6 +92,24 @@ def scenario_mpc():
     pv_measured = []
     l_measured = []
     errors = []
+    c_violations = 0
+
+    prediction_time = 0
+    simulation_time = 0
+    reduction_time = 0
+    solver_time = 0
+
+    # Initilize Montecarlo
+    N_sim = 200
+    monte_carlo = njit()(monte_carlo_simulations)
+    load_errors = (
+        pd.read_csv("./data/load_errors.csv").drop(["Unnamed: 0"], axis=1).fillna(0)
+    )
+    load_errors = shuffle_dataframe(load_errors).values
+    pv_errors = (
+        pd.read_csv("./data/pv_errors.csv").drop(["Unnamed: 0"], axis=1).fillna(0)
+    )
+    pv_errors = shuffle_dataframe(pv_errors).values
 
     # Build reference tree
     tree, leaf_nodes = build_scenario_tree(
@@ -96,6 +122,8 @@ def scenario_mpc():
     s0, lbs, ubs, lbg, ubg = ocp.build_scenario_ocp(tree)
 
     sys_metrics = metrics.SystemMetrics()
+    fig1, ax1 = plt.subplots()
+    fig2, ax2 = plt.subplots()
 
     for step in range(simulation_horizon - N):
 
@@ -123,17 +151,47 @@ def scenario_mpc():
 
         # Get predictions
         if perfect_predictions:
-            pv_ref = obs["PV"].values + np.random.normal(0, 0.2, N + 1)
-            l_ref = obs["L"].values + np.random.normal(0, 0.2, N + 1)
+            pv_ref = obs["PV"].values
+            l_ref = obs["L"].values
         else:
+            pred_time = time.time()
             pv_ref = PV.predict(ref.temp.values, ref.GHI.values)
             l_ref = l.scaled_mean_pred(l_true, step % 126)
+            E_ref = E[step : step + N]
+            prediction_time += time.time() - pred_time
 
-        root, leaf_nodes = build_scenario_tree(
-            N, Nr, branch_factor, pv_ref, 0.2, l_ref, 0.2
-        )
-        pv_scenarios = get_scenarios(leaf_nodes, "pv")
-        l_scenarios = get_scenarios(leaf_nodes, "l")
+        if N_scenarios == 1:
+            pv_scenarios = [pv_ref[1:]]
+            l_scenarios = [l_ref[1:]]
+
+        elif True:
+            sim_time = time.time()
+            pv_sims = monte_carlo(N, N_sim, pv_ref[1:], pv_errors)
+            l_sims = monte_carlo(N, N_sim, l_ref[1:], load_errors)
+
+            simulation_time += time.time() - sim_time
+
+            red_time = time.time()
+            pv_scenarios = scenario_reduction(pv_sims, N, Nr, branch_factor)
+            l_scenarios = scenario_reduction(l_sims, N, Nr, branch_factor)
+            reduction_time += time.time() - red_time
+
+        else:
+            _, leaf_nodes = build_scenario_tree(
+                N, Nr, branch_factor, pv_ref, 0.2, l_ref, 0.2
+            )
+            pv_scenarios = get_scenarios(leaf_nodes, "pv")
+            l_scenarios = get_scenarios(leaf_nodes, "l")
+
+        if step % N == 0:
+            for i in range(len(pv_scenarios)):
+                ax1.plot(range(step, step + N), pv_scenarios[i], color="red")
+                ax2.plot(range(step, step + N), l_scenarios[i], color="red")
+
+            ax1.plot(range(step, step + N), pv_ref[1:], color="blue")
+            ax1.plot(range(step, step + N), obs.PV[1:], color="green")
+            ax2.plot(range(step, step + N), l_ref[1:], color="blue")
+            ax2.plot(range(step, step + N), obs.L[1:], color="green")
 
         # Update parameters
         for i in range(N_scenarios):
@@ -147,7 +205,9 @@ def scenario_mpc():
                 s_data["scenario" + str(i), "data", k, "E"] = 1
                 s_data["scenario" + str(i), "data", k, "prob"] = 1
 
+        sol_time = time.time()
         xk_opt, Uk_opt = ocp.solve_nlp([s0, lbs, ubs, lbg, ubg], s_data)
+        solver_time += time.time() - sol_time
 
         # Simulate the system after disturbances
         current_time += timedelta(minutes=10)
@@ -170,6 +230,10 @@ def scenario_mpc():
 
         B.simulate_SOC(xk_opt, [uk[0], uk[1]])
 
+        if B.get_SOC(openloop) < 0.3 or B.get_SOC(openloop) > 0.9:
+            c_violations += 1
+            print("SOC constraint violation")
+
         sys_metrics.update_metrics([Pbc[-1], Pbd[-1], Pgb[-1], Pgs[-1]], E[-1], e)
 
         utils.print_status(step, [B.get_SOC(openloop)], step_time, every=50)
@@ -177,7 +241,11 @@ def scenario_mpc():
 
     sys_metrics.calculate_consumption_rate(Pgs, pv_measured)
     sys_metrics.calculate_dependency_rate(Pgb, l_measured)
-    sys_metrics.print_metrics()
+    sys_metrics.print_metrics(B.get_SOC(openloop))
+    print("Contraint violations", c_violations)
+
+    ax1.set_title("PV")
+    ax2.set_title("Load")
 
     # Plotting
     u = np.asarray(
@@ -206,22 +274,30 @@ def scenario_mpc():
         np.asarray([B.x_sim, B.x_opt]),
         title="State of charge",
         legends=["SOC", "SOC_opt"],
+        logpath=logpath,
     )
 
-    p.plot_data([np.asarray(errors)], title="Errors")
+    p.plot_data([np.asarray(errors)], title="Errors", logpath=logpath)
 
     p.plot_data(
         np.asarray([pv_measured, l_measured]),
         title="PV and Load",
         legends=["PV", "Load"],
+        logpath=logpath,
     )
 
-    # p.plot_data(np.asarray([E]), title="Spot Prices", legends=["Spotprice"])
+    # p.plot_data(np.asarray([E]), title="Spot Prices", legends=["Spotprice"],logpath=logpath)
 
     stop = time.time()
     print("\nFinished optimation in {}s".format(np.around(stop - start_time, 2)))
+    print("Prediction time was {}".format(np.around(prediction_time, 2)))
+    print("Simulation time was {}".format(np.around(simulation_time, 2)))
+    print("Reduction time was {}".format(np.around(reduction_time, 2)))
+    print("Solver time was {}".format(np.around(solver_time, 2)))
 
-    plt.ion()
+    if logpath:
+        fig1.savefig("{}-{}".format(logpath, "pv_scenarios" + ".eps"), format="eps")
+        fig2.savefig("{}-{}".format(logpath, "load_scenarios" + ".eps"), format="eps")
     if True:
         plt.show(block=True)
 
