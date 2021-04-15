@@ -85,7 +85,9 @@ def pv_analysis(N, pv, data, forecasts, plot=True):
         )
         # df = df.set_index("time")
         measurement = data[data.date == current_time]["PV"].iloc[0]
-        df["PV_pred"] = pv.predict(df.airTemp.values, df.GHI_forecast.values)
+        df["PV_pred"] = pv.predict(
+            df.airTemp.values, df.GHI_forecast.values, measurement
+        )
         # df["PV_pred"] = pv.predict(df.temp.values, df.GHI_obs.values)
         # plt.plot(df.index, df["PV"], color="blue")
         # plt.plot(df.index, df["PV_pred"], color="red")
@@ -123,9 +125,9 @@ def load_calculate_daily_error(L, day_load, method):
     """
     errors = []
     for step in range(day_load.shape[0] - L.N):
-        gt = day_load.iloc[step : step + L.N + 1].values[1:]
-        pred = method(gt[0], step)[1:]
-        error = gt - pred  # / gt[0]
+        gt = day_load.iloc[step : step + L.N + 1].values
+        pred = method(gt[0], step)
+        error = gt[1:] - pred  # / gt[0]
         errors.append(error)
     return np.asarray(errors)
 
@@ -195,7 +197,7 @@ def estimate_errors(N, PV, train_file, test_file, forecast_file, stopdate=None):
         stopdate = datetime(2100, 12, 30)
     L = Load(N, train_file, "L")
     test_data = pd.read_csv(test_file, parse_dates=["date"])
-    load_errors = load_analysis(test_data, L, L.scaled_mean_pred, plot=True)
+    load_errors = load_analysis(test_data, L, L.scaled_mean_pred, plot=False)
 
     observations = pd.read_csv(train_file, parse_dates=["date"]).fillna(0)
     solcast_forecasts = pd.read_csv(
@@ -226,7 +228,7 @@ def estimate_errors(N, PV, train_file, test_file, forecast_file, stopdate=None):
 if __name__ == "__main__":
     train_file = "./data/8.4_train.csv"
     estimate_errors(
-        18,
+        36,
         LinearPhotovoltaic("./data/8.4_train.csv"),
         "./data/8.4_test.csv",
         train_file,

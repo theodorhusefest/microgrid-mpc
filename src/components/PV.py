@@ -1,9 +1,12 @@
 from casadi import *
 import numpy as np
 import pandas as pd
+
+from datetime import datetime
 from sklearn import linear_model
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error
+from scipy.interpolate import interp1d
 
 
 class Photovoltaic:
@@ -174,14 +177,16 @@ class LinearPhotovoltaic:
         pred = self.model.predict(np.c_[temp, GHI]).flatten()
         pred = np.clip(pred, 0, np.inf)
         if np.min(pred) > 1 and measurement:
-            pred = (measurement / pred[0]) * pred
+            weight = np.linspace(0, 1, len(pred) + 1)
+            pred = np.append(np.asarray([measurement]), pred)
+            pred = (weight[::-1] * np.ones_like(pred) * measurement + weight * pred)[1:]
         return pred
 
 
 if __name__ == "__main__":
+    N = 12
+    PV = LinearPhotovoltaic("../data/8.4_train.csv")
 
-    PV = Photovoltaic()
-
-    df = pd.read_csv("./profiles/solcast_2021-02-03_10.csv.gzip", compression="gzip")
-    pred = PV.predict(df.iloc[:6].temp.values, df.iloc[:6].GHI.values)
-    print(pred)
+    data = pd.read_csv("../data/8.4_test.csv", parse_dates=["date"]).fillna(0)
+    data = data[data.date > datetime(2021, 4, 3, 14)].iloc[:N]
+    PV.predict(data.airTemp, data.GHI, measurement=300)

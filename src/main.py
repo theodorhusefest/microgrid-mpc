@@ -2,7 +2,6 @@ import time
 import argparse
 import numpy as np
 import pandas as pd
-import scipy.stats as stats
 import matplotlib.pyplot as plt
 from numba import njit
 from datetime import datetime, timedelta
@@ -33,7 +32,6 @@ def scenario_mpc():
     np.random.seed(1)
 
     conf = utils.parse_config()
-    mpc = conf["mpc"]
     testfile = conf["testfile"]
     trainfile = conf["trainfile"]
 
@@ -100,7 +98,7 @@ def scenario_mpc():
     solver_time = 0
 
     # Initilize Montecarlo
-    N_sim = 200
+    N_sim = 70
     monte_carlo = njit()(monte_carlo_simulations)
     load_errors = (
         pd.read_csv("./data/load_errors.csv").drop(["Unnamed: 0"], axis=1).fillna(0)
@@ -119,7 +117,7 @@ def scenario_mpc():
     ocp = ScenarioOCP(T, N, N_scenarios)
     s_data = ocp.s_data(0)
 
-    s0, lbs, ubs, lbg, ubg = ocp.build_scenario_ocp(tree)
+    s0, lbs, ubs, lbg, ubg = ocp.build_scenario_ocp()
 
     sys_metrics = metrics.SystemMetrics()
     fig1, ax1 = plt.subplots()
@@ -145,40 +143,48 @@ def scenario_mpc():
                 forecast = new_forecast
 
         ref = forecast[
-            (forecast["time"] >= current_time)
+            (forecast["time"] > current_time)
             & (forecast["time"] <= current_time + timedelta(minutes=10 * (N)))
         ]
 
         # Get predictions
         if perfect_predictions:
-            pv_ref = obs["PV"].values
-            l_ref = obs["L"].values
+            pv_prediction = obs["PV"].values[1:]
+            l_prediction = obs["L"].values[1:]
         else:
             pred_time = time.time()
-            pv_ref = PV.predict(ref.temp.values, ref.GHI.values)
-            l_ref = l.scaled_mean_pred(l_true, step % 126)
-            E_ref = E[step : step + N]
+            pv_prediction = PV.predict(
+                ref.temp.values, ref.GHI.values, obs["PV"].iloc[0]
+            )
+            l_prediction = l.scaled_mean_pred(l_true, step % (144 - N))
+
             prediction_time += time.time() - pred_time
 
         if N_scenarios == 1:
-            pv_scenarios = [pv_ref[1:]]
-            l_scenarios = [l_ref[1:]]
+            pv_scenarios = [pv_prediction]
+            l_scenarios = [l_prediction]
 
         elif True:
             sim_time = time.time()
-            pv_sims = monte_carlo(N, N_sim, pv_ref[1:], pv_errors)
-            l_sims = monte_carlo(N, N_sim, l_ref[1:], load_errors)
+            pv_sims = monte_carlo(N, N_sim, pv_prediction, pv_errors)
+            l_sims = monte_carlo(N, N_sim, l_prediction, load_errors)
 
             simulation_time += time.time() - sim_time
 
             red_time = time.time()
             pv_scenarios = scenario_reduction(pv_sims, N, Nr, branch_factor)
-            l_scenarios = scenario_reduction(l_sims, N, Nr, branch_factor)
+            l_scenarios = scenario_reduction(l_sims, N, Nr, branch_factor)[::-1]
             reduction_time += time.time() - red_time
 
         else:
             _, leaf_nodes = build_scenario_tree(
-                N, Nr, branch_factor, pv_ref, 0.2, l_ref, 0.2
+                N,
+                Nr,
+                branch_factor,
+                np.append(np.asarray([obs["PV"].iloc[0]]), pv_prediction),
+                25,
+                np.append(np.asarray([obs["L"].iloc[0]]), l_prediction),
+                25,
             )
             pv_scenarios = get_scenarios(leaf_nodes, "pv")
             l_scenarios = get_scenarios(leaf_nodes, "l")
@@ -188,9 +194,9 @@ def scenario_mpc():
                 ax1.plot(range(step, step + N), pv_scenarios[i], color="red")
                 ax2.plot(range(step, step + N), l_scenarios[i], color="red")
 
-            ax1.plot(range(step, step + N), pv_ref[1:], color="blue")
+            ax1.plot(range(step, step + N), pv_prediction, color="blue")
             ax1.plot(range(step, step + N), obs.PV[1:], color="green")
-            ax2.plot(range(step, step + N), l_ref[1:], color="blue")
+            ax2.plot(range(step, step + N), l_prediction, color="blue")
             ax2.plot(range(step, step + N), obs.L[1:], color="green")
 
         # Update parameters
@@ -230,9 +236,12 @@ def scenario_mpc():
 
         B.simulate_SOC(xk_opt, [uk[0], uk[1]])
 
-        if B.get_SOC(openloop) < 0.3 or B.get_SOC(openloop) > 0.9:
+        if (
+            B.get_SOC(openloop) < conf["system"]["x_min"]
+            or B.get_SOC(openloop) > conf["system"]["x_max"]
+        ):
+            print(B.get_SOC(openloop))
             c_violations += 1
-            print("SOC constraint violation")
 
         sys_metrics.update_metrics([Pbc[-1], Pbd[-1], Pgb[-1], Pgs[-1]], E[-1], e)
 

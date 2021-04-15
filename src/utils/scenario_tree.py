@@ -88,18 +88,18 @@ def build_scenario_tree(N, Nr, branching, pv_ref, pv_std, l_ref, l_std):
             p = 0.68
             if b == 3:
                 if j == 2:
-                    pv = pv - pv * pv_error
-                    l = l + l * l_error
+                    pv = pv - pv_error
+                    l = l + l_error
                 elif j == 1:
-                    pv = pv + pv * pv_error
-                    l = l - l * l_error
+                    pv = pv + pv_error
+                    l = l - l_error
             elif b == 2:
                 if j == 1:
-                    pv = pv - pv * pv_error
-                    l = l + l * l_error
+                    pv = pv - pv_error
+                    l = l + l_error
                 elif j == 0:
-                    pv = pv + pv * pv_error
-                    l = l - l * l_error
+                    pv = pv + pv_error
+                    l = l - l_error
             else:
                 p = 1
 

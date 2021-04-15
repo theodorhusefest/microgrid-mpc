@@ -2,6 +2,7 @@ from casadi import *
 from casadi.tools import *
 from utils.helpers import parse_config
 from pprint import pprint
+import matplotlib.pyplot as plt
 
 
 class ScenarioOCP:
@@ -45,7 +46,14 @@ class ScenarioOCP:
                 entry("slacks", struct=self.slacks, repeat=self.N),
             ]
         )
-        self.data = struct_symSX([entry("pv"), entry("l"), entry("E"), entry("prob")])
+        self.data = struct_symSX(
+            [
+                entry("pv"),
+                entry("l"),
+                entry("E"),
+                entry("prob"),
+            ]
+        )
         self.all_data = struct_symSX([entry("data", struct=self.data, repeat=self.N)])
 
         scenarios = []
@@ -160,6 +168,7 @@ class ScenarioOCP:
             self.s[scenario, "inputs", k, "Pgb"]
             - 0.7 * self.s[scenario, "inputs", k, "Pgs"]
         )
+
         J_scen += 1000 * (
             self.s[scenario, "inputs", k, "Pbc"] * self.s[scenario, "inputs", k, "Pbd"]
         )
@@ -167,13 +176,13 @@ class ScenarioOCP:
             self.s[scenario, "inputs", k, "Pgb"] * self.s[scenario, "inputs", k, "Pgs"]
         )
 
-        J_scen += 1000 * (self.s[scenario, "slacks", k, "us"] * 10) ** 2
-        J_scen += 1000 * (self.s[scenario, "slacks", k, "ls"] * 10) ** 2
-        if k == self.N - 2:
-            J_scen += (
-                self.ref_cost
-                * ((self.x_ref - self.s[scenario, "states", k, "SOC"]) * 100) ** 2
-            )
+        J_scen += 5000 * (self.s[scenario, "slacks", k, "us"] * 10) ** 2
+        J_scen += 5000 * (self.s[scenario, "slacks", k, "ls"] * 10) ** 2
+        # if k == self.N - 2:
+        #    J_scen += (
+        #        self.ref_cost
+        #        * ((self.x_ref - self.s[scenario, "states", k, "SOC"]) * 100) ** 2
+        #    )
         return J_scen
 
     def build_scenario_ocp(self, root=None):
@@ -192,8 +201,8 @@ class ScenarioOCP:
             J_scen = 0
             scenario = "scenario" + str(j)
 
-            lbs[scenario, "states", :, "SOC"] = 0
-            ubs[scenario, "states", :, "SOC"] = 1
+            lbs[scenario, "states", :, "SOC"] = 0.2
+            ubs[scenario, "states", :, "SOC"] = 0.8
             ubs[scenario, "inputs", :, "Pbc"] = self.Pb_max
             ubs[scenario, "inputs", :, "Pbd"] = self.Pb_max
             ubs[scenario, "inputs", :, "Pgs"] = self.Pg_max
@@ -235,7 +244,6 @@ class ScenarioOCP:
                 ubg += [0] * len(eq_con)
 
             J += J_scen
-
         # Non-anticipativity constraints
         if root:
             to_explore = [root]
@@ -266,6 +274,7 @@ class ScenarioOCP:
                 scenario = "scenario" + str(j)
                 for i in range(j + 1, self.N_scenarios):
                     subscenario = "scenario" + str(i)
+
                     if scenario == subscenario:
                         continue
                     g_ant = [
@@ -281,12 +290,13 @@ class ScenarioOCP:
                     g += g_ant
                     lbg += [0] * len(g_ant)
                     ubg += [0] * len(g_ant)
+
         prob = {"f": J, "x": self.s, "g": vertcat(*g), "p": self.s_data}
         if self.verbose:
             self.solver = nlpsol("solver", "ipopt", prob)
         else:
             opts = {
-                "verbose_init": True,
+                "verbose_init": False,
                 "ipopt": {"print_level": 2},
                 "print_time": False,
             }
@@ -306,11 +316,30 @@ class ScenarioOCP:
         )
         s_opt = sol["x"].full().flatten()
         s_opt = self.s(s_opt)
+        """
 
         self.SOC = np.append(self.SOC, s_opt["scenario" + str(0), "states", 1, "SOC"])
         self.Pbc = np.append(self.Pbc, s_opt["scenario" + str(0), "inputs", 0, "Pbc"])
         self.Pbd = np.append(self.Pbd, s_opt["scenario" + str(0), "inputs", 0, "Pbd"])
         self.Pgb = np.append(self.Pgb, s_opt["scenario" + str(0), "inputs", 0, "Pgb"])
         self.Pgs = np.append(self.Pgs, s_opt["scenario" + str(0), "inputs", 0, "Pgs"])
+        """
+        u1 = []
+        u2 = []
+        u3 = []
+        u4 = []
+        soc = []
+        for i in range(self.N_scenarios):
+            u1.append(s_opt["scenario" + str(i), "inputs", 0, "Pbc"])
+            u2.append(s_opt["scenario" + str(i), "inputs", 0, "Pbd"])
+            u3.append(s_opt["scenario" + str(i), "inputs", 0, "Pgb"])
+            u4.append(s_opt["scenario" + str(i), "inputs", 0, "Pgs"])
+            soc.append(s_opt["scenario" + str(0), "states", 1, "SOC"])
+
+        self.SOC = np.append(self.SOC, np.mean(soc))
+        self.Pbc = np.append(self.Pbc, np.mean(u1))
+        self.Pbd = np.append(self.Pbd, np.mean(u2))
+        self.Pgb = np.append(self.Pgb, np.mean(u3))
+        self.Pgs = np.append(self.Pgs, np.mean(u4))
 
         return self.get_SOC_opt(), self.get_u_opt()

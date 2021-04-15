@@ -155,7 +155,7 @@ class LSTM:
         )
 
     def load_data(self, datafile):
-        data = pd.read_csv(datafile, parse_dates=["date"])
+        data = pd.read_csv(datafile, parse_dates=["date"]).fillna(0)
         data["time"] = data.date.dt.hour + data.date.dt.minute / 60
         return data[::self.sample_rate]
 

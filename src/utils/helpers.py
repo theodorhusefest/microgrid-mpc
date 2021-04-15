@@ -149,7 +149,8 @@ def calculate_real_u(x, u, pv, l):
     Calculates the real inputs based on topology contraint
     """
     e = -u[0] + u[1] + u[2] - u[3] + pv - l
-    e_hold = e
+    if np.around(e, 2) == 0:
+        return 0, u
     if is_zero(e):
         pass
     elif e > 0:  # Suplus of energy
