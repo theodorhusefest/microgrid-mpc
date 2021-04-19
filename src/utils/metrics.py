@@ -51,7 +51,7 @@ class SystemMetrics:
         Updates all metrics
         """
 
-        self.grid_cost += spot_price * (U[2] - U[3]) / self.actions_per_hour
+        self.grid_cost += spot_price * (U[2] - 0.9 * U[3]) / self.actions_per_hour
         self.battery_cost += (
             self.battery_deg * (np.sum(np.abs([U[0:1]]))) / self.actions_per_hour
         )

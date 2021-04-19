@@ -60,7 +60,7 @@ def scenario_mpc():
 
     # Get data
     observations = pd.read_csv(testfile, parse_dates=["date"]).fillna(0)
-    observations = observations[observations["date"] >= datetime(2021, 4, 2)]
+    observations = observations[observations["date"] >= datetime(2021, 3, 26)]
     solcast_forecasts = pd.read_csv(
         conf["solcast_file"], parse_dates=["time", "collected"]
     ).fillna(0)
@@ -77,7 +77,7 @@ def scenario_mpc():
         & (observations["date"] <= current_time + timedelta(minutes=10 * N))
     ]
 
-    l = Load(N, trainfile, "L", groundtruth=observations["L"])
+    l = Load(N, trainfile, "L", groundtruth=trainfile)
     E = np.ones(2000)  # get_spot_price()
     B = Battery(T, N, **conf["battery"])
     PV = LinearPhotovoltaic(trainfile)
@@ -98,15 +98,13 @@ def scenario_mpc():
     solver_time = 0
 
     # Initilize Montecarlo
-    N_sim = 70
+    N_sim = 3
     monte_carlo = njit()(monte_carlo_simulations)
-    load_errors = (
-        pd.read_csv("./data/load_errors.csv").drop(["Unnamed: 0"], axis=1).fillna(0)
-    )
+    load_errors = pd.read_csv("./data/load_errors.csv").drop(["Unnamed: 0"], axis=1)
+    load_errors = load_errors[~np.isnan(load_errors).any(axis=1)]
     load_errors = shuffle_dataframe(load_errors).values
-    pv_errors = (
-        pd.read_csv("./data/pv_errors.csv").drop(["Unnamed: 0"], axis=1).fillna(0)
-    )
+    pv_errors = pd.read_csv("./data/pv_errors.csv").drop(["Unnamed: 0"], axis=1)
+    pv_errors = pv_errors[~np.isnan(pv_errors).any(axis=1)]
     pv_errors = shuffle_dataframe(pv_errors).values
 
     # Build reference tree
@@ -123,6 +121,7 @@ def scenario_mpc():
     fig1, ax1 = plt.subplots()
     fig2, ax2 = plt.subplots()
 
+    prob = [1, 1, 1]
     for step in range(simulation_horizon - N):
 
         # Get measurements
@@ -156,7 +155,8 @@ def scenario_mpc():
             pv_prediction = PV.predict(
                 ref.temp.values, ref.GHI.values, obs["PV"].iloc[0]
             )
-            l_prediction = l.scaled_mean_pred(l_true, step % (144 - N))
+            # l_prediction = l.scaled_mean_pred(l_true, step % (144 - N))
+            l_prediction = l.get_prediction_mean(step % (144 - N))
 
             prediction_time += time.time() - pred_time
 
@@ -165,15 +165,35 @@ def scenario_mpc():
             l_scenarios = [l_prediction]
 
         elif True:
+            pv_upper = PV.predict(ref.temp.values, ref.GHI90.values, obs["PV"].iloc[0])
+            pv_lower = PV.predict(ref.temp.values, ref.GHI10.values, obs["PV"].iloc[0])
+            pv_scenarios = [pv_upper, pv_prediction, pv_lower]
+
+            l_sims = np.clip(
+                monte_carlo_simulations(N, N_sim, l_prediction, load_errors), 0, np.inf
+            )
+            l_scenarios = np.sort(l_sims, axis=0)
+
+            prob = [0.1, 0.8, 0.1]
+
+        elif True:
             sim_time = time.time()
-            pv_sims = monte_carlo(N, N_sim, pv_prediction, pv_errors)
-            l_sims = monte_carlo(N, N_sim, l_prediction, load_errors)
+            pv_sims = np.clip(
+                monte_carlo_simulations(N, N_sim, pv_prediction, pv_errors), 0, np.inf
+            )
+            l_sims = np.clip(
+                monte_carlo_simulations(N, N_sim, l_prediction, load_errors), 0, np.inf
+            )
 
             simulation_time += time.time() - sim_time
 
             red_time = time.time()
-            pv_scenarios = scenario_reduction(pv_sims, N, Nr, branch_factor)
-            l_scenarios = scenario_reduction(l_sims, N, Nr, branch_factor)[::-1]
+            # pv_scenarios = scenario_reduction(pv_sims, N, Nr, branch_factor)
+            # l_scenarios = scenario_reduction(l_sims, N, Nr, branch_factor)[::-1]
+
+            pv_scenarios = np.sort(pv_sims, axis=0)
+            l_scenarios = np.sort(l_sims, axis=0)
+
             reduction_time += time.time() - red_time
 
         else:
@@ -189,7 +209,7 @@ def scenario_mpc():
             pv_scenarios = get_scenarios(leaf_nodes, "pv")
             l_scenarios = get_scenarios(leaf_nodes, "l")
 
-        if step % N == 0:
+        if step % 5 == 0:
             for i in range(len(pv_scenarios)):
                 ax1.plot(range(step, step + N), pv_scenarios[i], color="red")
                 ax2.plot(range(step, step + N), l_scenarios[i], color="red")
@@ -209,7 +229,7 @@ def scenario_mpc():
                 s_data["scenario" + str(i), "data", k, "pv"] = pv_scenarios[i][k]
                 s_data["scenario" + str(i), "data", k, "l"] = l_scenarios[i][k]
                 s_data["scenario" + str(i), "data", k, "E"] = 1
-                s_data["scenario" + str(i), "data", k, "prob"] = 1
+                s_data["scenario" + str(i), "data", k, "prob"] = prob[i]
 
         sol_time = time.time()
         xk_opt, Uk_opt = ocp.solve_nlp([s0, lbs, ubs, lbg, ubg], s_data)
@@ -240,7 +260,6 @@ def scenario_mpc():
             B.get_SOC(openloop) < conf["system"]["x_min"]
             or B.get_SOC(openloop) > conf["system"]["x_max"]
         ):
-            print(B.get_SOC(openloop))
             c_violations += 1
 
         sys_metrics.update_metrics([Pbc[-1], Pbd[-1], Pgb[-1], Pgs[-1]], E[-1], e)

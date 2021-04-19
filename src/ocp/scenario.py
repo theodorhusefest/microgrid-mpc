@@ -37,7 +37,16 @@ class ScenarioOCP:
                 entry("Pgs"),
             ]
         )
-        self.slacks = struct_symSX([entry("us"), entry("ls"), entry("s1"), entry("s2")])
+        self.slacks = struct_symSX(
+            [
+                entry("us"),
+                entry("ls"),
+                entry("s1"),
+                entry("s2"),
+                entry("s3"),
+                entry("s4"),
+            ]
+        )
 
         self.w = struct_symSX(
             [
@@ -175,14 +184,16 @@ class ScenarioOCP:
         J_scen += 1000 * (
             self.s[scenario, "inputs", k, "Pgb"] * self.s[scenario, "inputs", k, "Pgs"]
         )
+        J_scen += 100 * (self.s[scenario, "slacks", k, "s3"] * 10) ** 2
+        J_scen += 100 * (self.s[scenario, "slacks", k, "s4"] * 10) ** 2
 
-        J_scen += 5000 * (self.s[scenario, "slacks", k, "us"] * 10) ** 2
-        J_scen += 5000 * (self.s[scenario, "slacks", k, "ls"] * 10) ** 2
-        # if k == self.N - 2:
-        #    J_scen += (
-        #        self.ref_cost
-        #        * ((self.x_ref - self.s[scenario, "states", k, "SOC"]) * 100) ** 2
-        #    )
+        J_scen += 10000 * (self.s[scenario, "slacks", k, "us"] * 10) ** 2
+        J_scen += 10000 * (self.s[scenario, "slacks", k, "ls"] * 10) ** 2
+        if k == self.N - 2:
+            J_scen += (
+                self.ref_cost
+                * ((self.x_ref - self.s[scenario, "states", k, "SOC"]) * 100) ** 2
+            )
         return J_scen
 
     def build_scenario_ocp(self, root=None):
@@ -201,8 +212,8 @@ class ScenarioOCP:
             J_scen = 0
             scenario = "scenario" + str(j)
 
-            lbs[scenario, "states", :, "SOC"] = 0.2
-            ubs[scenario, "states", :, "SOC"] = 0.8
+            lbs[scenario, "states", :, "SOC"] = self.x_min
+            ubs[scenario, "states", :, "SOC"] = self.x_max
             ubs[scenario, "inputs", :, "Pbc"] = self.Pb_max
             ubs[scenario, "inputs", :, "Pbd"] = self.Pb_max
             ubs[scenario, "inputs", :, "Pgs"] = self.Pg_max
@@ -212,6 +223,8 @@ class ScenarioOCP:
             ubs[scenario, "slacks", :, "ls"] = inf
             ubs[scenario, "slacks", :, "s1"] = inf
             ubs[scenario, "slacks", :, "s2"] = inf
+            ubs[scenario, "slacks", :, "s3"] = inf
+            ubs[scenario, "slacks", :, "s4"] = inf
 
             for k in range(self.N - 1):
                 states_k = self.s[scenario, "states", k]
@@ -230,6 +243,10 @@ class ScenarioOCP:
                     - self.s[scenario, "inputs", k, "Pgs"]
                     + self.s_data[scenario, "data", k, "pv"]
                     - self.s_data[scenario, "data", k, "l"],
+                ]
+                """
+                    + self.s[scenario, "slacks", k, "s3"]
+                    -self.s[scenario, "slacks", k, "s4"],
                     self.s[scenario, "states", k, "SOC"]
                     - self.s[scenario, "slacks", k, "us"]
                     + self.s[scenario, "slacks", k, "s2"]
@@ -237,13 +254,15 @@ class ScenarioOCP:
                     self.s[scenario, "states", k, "SOC"]
                     + self.s[scenario, "slacks", k, "ls"]
                     - self.s[scenario, "slacks", k, "s1"]
-                    - self.x_min,
+                    - self.x_min, 
+                    ,
                 ]
+                """
                 g += eq_con
                 lbg += [0] * len(eq_con)
                 ubg += [0] * len(eq_con)
 
-            J += J_scen
+            J += self.s_data[scenario, "data", k, "prob"] * J_scen
         # Non-anticipativity constraints
         if root:
             to_explore = [root]
@@ -256,10 +275,10 @@ class ScenarioOCP:
                     for j in range(i + 1, len(current.scenarios)):
                         subscenario = current.scenarios[j]
                         g_ant = [
-                            self.s[scenario, "inputs", k, "Pbc"]
-                            - self.s[subscenario, "inputs", k, "Pbc"],
-                            self.s[scenario, "inputs", k, "Pbd"]
-                            - self.s[subscenario, "inputs", k, "Pbd"],
+                            # self.s[scenario, "inputs", k, "Pbc"]
+                            # - self.s[subscenario, "inputs", k, "Pbc"],
+                            # self.s[scenario, "inputs", k, "Pbd"]
+                            # - self.s[subscenario, "inputs", k, "Pbd"],
                             self.s[scenario, "inputs", k, "Pgb"]
                             - self.s[subscenario, "inputs", k, "Pgb"],
                             self.s[scenario, "inputs", k, "Pgs"]
@@ -278,10 +297,10 @@ class ScenarioOCP:
                     if scenario == subscenario:
                         continue
                     g_ant = [
-                        self.s[scenario, "inputs", 0, "Pbc"]
-                        - self.s[subscenario, "inputs", 0, "Pbc"],
-                        self.s[scenario, "inputs", 0, "Pbd"]
-                        - self.s[subscenario, "inputs", 0, "Pbd"],
+                        # self.s[scenario, "inputs", 0, "Pbc"]
+                        # - self.s[subscenario, "inputs", 0, "Pbc"],
+                        # self.s[scenario, "inputs", 0, "Pbd"]
+                        # - self.s[subscenario, "inputs", 0, "Pbd"],
                         self.s[scenario, "inputs", 0, "Pgb"]
                         - self.s[subscenario, "inputs", 0, "Pgb"],
                         self.s[scenario, "inputs", 0, "Pgs"]

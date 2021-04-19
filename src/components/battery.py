@@ -53,6 +53,6 @@ class Battery:
 
     def get_SOC(self, openloop):
         if openloop:
-            return np.around(self.xk_opt, 2)
+            return np.around(self.xk_opt, 3)
         else:
-            return np.around(self.xk_sim, 2)
+            return np.around(self.xk_sim, 3)

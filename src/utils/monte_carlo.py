@@ -12,6 +12,7 @@ from components.PV import Photovoltaic
 
 def monte_carlo_simulations(N, N_sim, forecast, errors):
     sims = np.zeros((N_sim, N))
+    errors = np.c_[errors, np.zeros((errors.shape[0], N - errors.shape[1]))]
 
     if forecast.all() == 0:
         return sims
@@ -46,7 +47,7 @@ def scenario_reduction(sims, N, Nr, branch_factor):
         else:
             centers = centers.flatten()
 
-        clusters.append(np.sort(centers))
+        clusters.append(np.clip(np.sort(centers), 0, np.inf))
 
     return np.asarray(clusters).reshape(sims.shape[1], N_scenarios).T
 

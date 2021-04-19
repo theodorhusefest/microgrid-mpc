@@ -1,7 +1,7 @@
-simulation_horizon: 24 # hours
-prediction_horizon: 6 # hours
-robust_horizon: 2 # steps
-branch_factor: 2
+simulation_horizon: 60 # hours
+prediction_horizon: 10 # hours
+robust_horizon: 1 # steps
+branch_factor: 3
 
 actions_per_hour: 6
 logpath: "./logs/"
@@ -28,4 +28,4 @@ system:
   battery_cost: 0.128
   grid_cost: 10
   ref_cost: 25
-  verbose: True
+  verbose: False
