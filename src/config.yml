@@ -10,7 +10,7 @@ trainfile: "./data/8.4_train.csv"
 solcast_file: "./data/solcast_cleaned.csv"
 price_file: "./data/spot_prices.csv"
 openloop: False
-perfect_predictions: False
+perfect_predictions: True
 
 battery:
   x_initial: 0.6
@@ -26,7 +26,7 @@ system:
   x_ref: 0.6
   Pb_max: 1000
   Pg_max: 1000
-  battery_cost: -10
+  battery_cost: 0
   grid_cost: 10
   ref_cost: 1
   verbose: False

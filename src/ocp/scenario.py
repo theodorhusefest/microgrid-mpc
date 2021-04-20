@@ -107,7 +107,7 @@ class ScenarioOCP:
         Returns the objective function.
         """
         return (1 / self.C_MAX) * (
-            (self.nb_c * self.inputs["Pbc"]) - self.inputs["Pbd"] / (0.9 * self.nb_d)
+            (self.nb_c * self.inputs["Pbc"]) - self.inputs["Pbd"]
         )
 
     def build_integrator(self):

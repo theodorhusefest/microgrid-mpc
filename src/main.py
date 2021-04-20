@@ -227,7 +227,7 @@ def scenario_mpc():
             for k in range(N - 1):
                 s_data["scenario" + str(i), "data", k, "pv"] = pv_scenarios[i][k]
                 s_data["scenario" + str(i), "data", k, "l"] = l_scenarios[i][k]
-                s_data["scenario" + str(i), "data", k, "E"] = E_prediction[i]
+                s_data["scenario" + str(i), "data", k, "E"] = E_prediction[k]
                 s_data["scenario" + str(i), "data", k, "prob"] = prob[i]
 
         sol_time = time.time()

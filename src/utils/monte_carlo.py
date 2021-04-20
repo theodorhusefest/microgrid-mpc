@@ -3,7 +3,6 @@ from numba import njit
 import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
-import faiss
 import matplotlib.pyplot as plt
 
 from components.loads import Load
