@@ -13,6 +13,7 @@ from statsmodels.stats.diagnostic import lilliefors
 def load_analysis(data, L, method, plot=True):
     daily_errors = []
     for _, day_df in data.groupby(data.date.dt.day):
+        print(day_df.date)
         daily_errors.append(load_calculate_daily_error(L, day_df[L.column], method))
 
     daily_errors = np.asarray(daily_errors)
@@ -47,6 +48,40 @@ def load_analysis(data, L, method, plot=True):
         plot_boxplot(error_df, method.__name__)
         plot_daily_errors(daily_errors, method.__name__)
         plot_error_hist(daily_errors, method.__name__)
+        plt.show()
+
+    return error_df
+
+
+def load_analysis_2(N, L, data, plot=True):
+    error_df = pd.DataFrame()
+
+    for i in range(144, data.shape[0] - N):
+        current_time = data.date[i]
+        L_pred = L.get_previous_day(current_time, data.L.iloc[i])
+        L_true = data[
+            (data["date"] > current_time)
+            & (data["date"] <= (current_time + timedelta(minutes=10 * N)))
+        ][L.column].values
+        error_df[i - 144] = L_true - L_pred
+
+    error_df = error_df.transpose()
+    error_df = error_df[
+        (error_df < np.percentile(error_df, 95))
+        & (error_df > np.percentile(error_df, 5))
+    ]
+    if plot:
+        print("****** Load statistics ******")
+        print(error_df.describe())
+        print("\n" + "*" * 30 + " Lilliefors " + "*" * 30)
+        print(
+            "Lilliefors test-statistic:",
+            lilliefors(error_df.values.flatten(), dist="norm")[1],
+        )
+        print_rmse(error_df)
+        plot_boxplot(error_df, "Load")
+        # plot_daily_errors(error_df.values, "PV")
+        plot_error_hist(error_df.values, "Load")
         plt.show()
 
     return error_df
@@ -196,8 +231,8 @@ def estimate_errors(N, PV, train_file, test_file, forecast_file, stopdate=None):
     if not stopdate:
         stopdate = datetime(2100, 12, 30)
     L = Load(N, train_file, "L")
-    test_data = pd.read_csv(test_file, parse_dates=["date"])
-    load_errors = load_analysis(test_data, L, L.scaled_mean_pred, plot=False)
+    test_data = pd.read_csv(train_file, parse_dates=["date"])
+    load_errors = load_analysis_2(N, L, test_data, plot=True)
 
     observations = pd.read_csv(train_file, parse_dates=["date"]).fillna(0)
     solcast_forecasts = pd.read_csv(
@@ -228,7 +263,7 @@ def estimate_errors(N, PV, train_file, test_file, forecast_file, stopdate=None):
 if __name__ == "__main__":
     train_file = "./data/8.4_train.csv"
     estimate_errors(
-        36,
+        60,
         LinearPhotovoltaic("./data/8.4_train.csv"),
         "./data/8.4_test.csv",
         train_file,

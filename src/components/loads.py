@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from datetime import datetime, timedelta
 
 
 class Load:
@@ -10,7 +11,7 @@ class Load:
         self.resolution = 60 / actions_per_hour
         self.column = column
 
-        self.df = pd.read_csv(self.train_file, parse_dates=["date"])
+        self.df = pd.read_csv(self.train_file, parse_dates=["date"]).fillna(0)
         self.mean = self.get_mean_day()
 
         if isinstance(groundtruth, pd.Series):
@@ -63,6 +64,23 @@ class Load:
         """
 
         return self.true[step : step + self.N + 1][1:]
+
+    def get_previous_day(self, current_time, measurement):
+        """
+        Returns the same values the day before
+        """
+        pred_start = current_time - timedelta(days=1)
+
+        pred = self.df[
+            (self.df["date"] > pred_start)
+            & (self.df["date"] <= (pred_start + timedelta(minutes=10 * self.N)))
+        ][self.column].values
+
+        if np.min(pred) > 1 and measurement:
+            weight = np.linspace(0, 1, len(pred) + 1)
+            pred = np.append(np.asarray([measurement]), pred)
+            pred = (weight[::-1] * np.ones_like(pred) * measurement + weight * pred)[1:]
+        return pred
 
     def get_measurement(self, step):
         if self.groundtruth is None:

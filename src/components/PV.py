@@ -1,7 +1,7 @@
 from casadi import *
 import numpy as np
 import pandas as pd
-
+import matplotlib.pyplot as plt
 from datetime import datetime
 from sklearn import linear_model
 from sklearn.model_selection import train_test_split
@@ -177,7 +177,8 @@ class LinearPhotovoltaic:
         pred = self.model.predict(np.c_[temp, GHI]).flatten()
         pred = np.clip(pred, 0, np.inf)
         if np.min(pred) > 1 and measurement:
-            weight = np.linspace(0, 1, len(pred) + 1)
+
+            weight = np.append(np.linspace(0, 1, 12 + 1), np.ones(len(pred) - 12))
             pred = np.append(np.asarray([measurement]), pred)
             pred = (weight[::-1] * np.ones_like(pred) * measurement + weight * pred)[1:]
         return pred

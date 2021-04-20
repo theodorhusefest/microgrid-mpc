@@ -36,7 +36,8 @@ def scenario_reduction(sims, N, Nr, branch_factor):
     if sims.all() == 0:
         return np.zeros((N_scenarios, N))
     for k in range(N):
-        n_clusters = np.min([branch_factor ** (k + 1), N_scenarios])
+        n_clusters = int(np.min([branch_factor ** (k + 1), N_scenarios]))
+
         kmeans = KMeans(n_clusters=n_clusters)
         kmeans.fit(sims[:, k].reshape(-1, 1))
         centers = kmeans.cluster_centers_

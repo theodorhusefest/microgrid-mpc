@@ -1,11 +1,11 @@
-simulation_horizon: 60 # hours
+simulation_horizon: 144 # hours
 prediction_horizon: 10 # hours
 robust_horizon: 1 # steps
 branch_factor: 3
 
 actions_per_hour: 6
 logpath: "./logs/"
-testfile: "./data/8.4_test.csv"
+testfile: "./data/8.4_cleaned.csv"
 trainfile: "./data/8.4_train.csv"
 solcast_file: "./data/solcast_cleaned.csv"
 openloop: False

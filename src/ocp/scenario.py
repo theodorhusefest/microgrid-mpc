@@ -187,8 +187,8 @@ class ScenarioOCP:
         J_scen += 100 * (self.s[scenario, "slacks", k, "s3"] * 10) ** 2
         J_scen += 100 * (self.s[scenario, "slacks", k, "s4"] * 10) ** 2
 
-        J_scen += 10000 * (self.s[scenario, "slacks", k, "us"] * 10) ** 2
-        J_scen += 10000 * (self.s[scenario, "slacks", k, "ls"] * 10) ** 2
+        J_scen += 5000 * (self.s[scenario, "slacks", k, "us"] * 10) ** 2
+        J_scen += 5000 * (self.s[scenario, "slacks", k, "ls"] * 10) ** 2
         if k == self.N - 2:
             J_scen += (
                 self.ref_cost
@@ -212,8 +212,8 @@ class ScenarioOCP:
             J_scen = 0
             scenario = "scenario" + str(j)
 
-            lbs[scenario, "states", :, "SOC"] = self.x_min
-            ubs[scenario, "states", :, "SOC"] = self.x_max
+            lbs[scenario, "states", :, "SOC"] = 0  # self.x_min
+            ubs[scenario, "states", :, "SOC"] = 1  # self.x_max
             ubs[scenario, "inputs", :, "Pbc"] = self.Pb_max
             ubs[scenario, "inputs", :, "Pbd"] = self.Pb_max
             ubs[scenario, "inputs", :, "Pgs"] = self.Pg_max
@@ -243,10 +243,8 @@ class ScenarioOCP:
                     - self.s[scenario, "inputs", k, "Pgs"]
                     + self.s_data[scenario, "data", k, "pv"]
                     - self.s_data[scenario, "data", k, "l"],
-                ]
-                """
-                    + self.s[scenario, "slacks", k, "s3"]
-                    -self.s[scenario, "slacks", k, "s4"],
+                    +self.s[scenario, "slacks", k, "s3"]
+                    - self.s[scenario, "slacks", k, "s4"],
                     self.s[scenario, "states", k, "SOC"]
                     - self.s[scenario, "slacks", k, "us"]
                     + self.s[scenario, "slacks", k, "s2"]
@@ -254,10 +252,9 @@ class ScenarioOCP:
                     self.s[scenario, "states", k, "SOC"]
                     + self.s[scenario, "slacks", k, "ls"]
                     - self.s[scenario, "slacks", k, "s1"]
-                    - self.x_min, 
-                    ,
+                    - self.x_min,
                 ]
-                """
+
                 g += eq_con
                 lbg += [0] * len(eq_con)
                 ubg += [0] * len(eq_con)
