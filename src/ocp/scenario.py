@@ -43,8 +43,6 @@ class ScenarioOCP:
                 entry("ls"),
                 entry("s1"),
                 entry("s2"),
-                entry("s3"),
-                entry("s4"),
             ]
         )
 
@@ -63,7 +61,9 @@ class ScenarioOCP:
                 entry("prob"),
             ]
         )
-        self.all_data = struct_symSX([entry("data", struct=self.data, repeat=self.N)])
+        self.all_data = struct_symSX(
+            [entry("data", struct=self.data, repeat=self.N - 1)]
+        )
 
         scenarios = []
         s_data = []
@@ -111,31 +111,7 @@ class ScenarioOCP:
             (self.nb_c * self.inputs["Pbc"]) - self.inputs["Pbd"] / self.nb_d
         )
 
-    def update_forecasts(self, pv, l, E):
-        """
-        Creates datastruct with relevant data
-        """
-
-        data_struct = self.all_data(0)
-        for k in range(self.N):
-            data_struct["data", k, "pv"] = pv[k]
-            data_struct["data", k, "l"] = l[k]
-            data_struct["data", k, "E"] = E[k]
-
-        return data_struct
-
-    def build_objective_function(self, e_spot):
-
-        return (
-            self.battery_cost * (self.inputs["Pbc"] + self.inputs["Pbd"])
-            + e_spot * (self.inputs["Pgb"] - 0.9 * self.inputs["Pgs"])
-            + self.grid_cost * (self.inputs["Pgb"] + self.inputs["Pgs"]) ** 2
-            + 100 * self.inputs["Pbc"] * self.inputs["Pbd"]
-            + 100 * self.inputs["Pgb"] * self.inputs["Pgs"]
-            + self.ref_cost * ((self.x_ref - self.states["SOC"]) * 100) ** 2
-        )
-
-    def build_integrator(self, e_spot):
+    def build_integrator(self):
         """
         Creates the integrator for the current system.
         """
@@ -145,50 +121,31 @@ class ScenarioOCP:
         f = Function(
             "f",
             [self.states, self.inputs],
-            [self.ode, self.build_objective_function(e_spot)],
+            [self.ode],
         )
         X0 = SX.sym("X0")
         U = SX.sym("U", 4)
         X = X0
-        Q = 0
         for _ in range(M):
-            k1, k1_q = f(X, U)
-            k2, k2_q = f(X + DT / 2 * k1, U)
-            k3, k3_q = f(X + DT / 2 * k2, U)
-            k4, k4_q = f(X + DT * k3, U)
+            k1 = f(X, U)
+            k2 = f(X + DT / 2 * k1, U)
+            k3 = f(X + DT / 2 * k2, U)
+            k4 = f(X + DT * k3, U)
             X = X + DT / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
-            Q = Q + DT / 6 * (k1_q + 2 * k2_q + 2 * k3_q + k4_q)
-        return Function("F", [X0, U], [X, Q], ["x0", "p"], ["xf", "qf"])
+        return Function("F", [X0, U], [X], ["x0", "p"], ["xf"])
 
     def add_stage_cost(self, scenario, k):
-        J_scen = 0
-        J_scen += self.battery_cost * (
+        J_scen = self.battery_cost * (
             self.s[scenario, "inputs", k, "Pbc"] + self.s[scenario, "inputs", k, "Pbd"]
         )
-        J_scen += (
-            self.grid_cost
-            * (
-                self.s[scenario, "inputs", k, "Pgb"]
-                + self.s[scenario, "inputs", k, "Pgs"]
-            )
-            ** 2
-        )
+
         J_scen += 1 * (
             self.s[scenario, "inputs", k, "Pgb"]
-            - 0.7 * self.s[scenario, "inputs", k, "Pgs"]
+            - 0.9 * self.s[scenario, "inputs", k, "Pgs"]
         )
 
-        J_scen += 1000 * (
-            self.s[scenario, "inputs", k, "Pbc"] * self.s[scenario, "inputs", k, "Pbd"]
-        )
-        J_scen += 1000 * (
-            self.s[scenario, "inputs", k, "Pgb"] * self.s[scenario, "inputs", k, "Pgs"]
-        )
-        J_scen += 100 * (self.s[scenario, "slacks", k, "s3"] * 10) ** 2
-        J_scen += 100 * (self.s[scenario, "slacks", k, "s4"] * 10) ** 2
-
-        J_scen += 5000 * (self.s[scenario, "slacks", k, "us"] * 10) ** 2
-        J_scen += 5000 * (self.s[scenario, "slacks", k, "ls"] * 10) ** 2
+        J_scen += 100 * (self.s[scenario, "slacks", k, "us"] * 10) ** 2
+        J_scen += 100 * (self.s[scenario, "slacks", k, "ls"] * 10) ** 2
         if k == self.N - 2:
             J_scen += (
                 self.ref_cost
@@ -206,14 +163,14 @@ class ScenarioOCP:
         lbg = []
         ubg = []
 
-        F = self.build_integrator(1)
+        F = self.build_integrator()
 
         for j in range(self.N_scenarios):
             J_scen = 0
             scenario = "scenario" + str(j)
 
-            lbs[scenario, "states", :, "SOC"] = 0  # self.x_min
-            ubs[scenario, "states", :, "SOC"] = 1  # self.x_max
+            lbs[scenario, "states", :, "SOC"] = self.x_min
+            ubs[scenario, "states", :, "SOC"] = self.x_max
             ubs[scenario, "inputs", :, "Pbc"] = self.Pb_max
             ubs[scenario, "inputs", :, "Pbd"] = self.Pb_max
             ubs[scenario, "inputs", :, "Pgs"] = self.Pg_max
@@ -223,8 +180,6 @@ class ScenarioOCP:
             ubs[scenario, "slacks", :, "ls"] = inf
             ubs[scenario, "slacks", :, "s1"] = inf
             ubs[scenario, "slacks", :, "s2"] = inf
-            ubs[scenario, "slacks", :, "s3"] = inf
-            ubs[scenario, "slacks", :, "s4"] = inf
 
             for k in range(self.N - 1):
                 states_k = self.s[scenario, "states", k]
@@ -243,8 +198,6 @@ class ScenarioOCP:
                     - self.s[scenario, "inputs", k, "Pgs"]
                     + self.s_data[scenario, "data", k, "pv"]
                     - self.s_data[scenario, "data", k, "l"],
-                    +self.s[scenario, "slacks", k, "s3"]
-                    - self.s[scenario, "slacks", k, "s4"],
                     self.s[scenario, "states", k, "SOC"]
                     - self.s[scenario, "slacks", k, "us"]
                     + self.s[scenario, "slacks", k, "s2"]
@@ -272,14 +225,14 @@ class ScenarioOCP:
                     for j in range(i + 1, len(current.scenarios)):
                         subscenario = current.scenarios[j]
                         g_ant = [
-                            # self.s[scenario, "inputs", k, "Pbc"]
-                            # - self.s[subscenario, "inputs", k, "Pbc"],
-                            # self.s[scenario, "inputs", k, "Pbd"]
-                            # - self.s[subscenario, "inputs", k, "Pbd"],
-                            self.s[scenario, "inputs", k, "Pgb"]
-                            - self.s[subscenario, "inputs", k, "Pgb"],
-                            self.s[scenario, "inputs", k, "Pgs"]
-                            - self.s[subscenario, "inputs", k, "Pgs"],
+                            self.s[scenario, "inputs", k, "Pbc"]
+                            - self.s[subscenario, "inputs", k, "Pbc"],
+                            self.s[scenario, "inputs", k, "Pbd"]
+                            - self.s[subscenario, "inputs", k, "Pbd"],
+                            # self.s[scenario, "inputs", k, "Pgb"]
+                            # - self.s[subscenario, "inputs", k, "Pgb"],
+                            # self.s[scenario, "inputs", k, "Pgs"]
+                            # - self.s[subscenario, "inputs", k, "Pgs"],
                         ]
                         g += g_ant
                         lbg += [0] * len(g_ant)
@@ -294,14 +247,14 @@ class ScenarioOCP:
                     if scenario == subscenario:
                         continue
                     g_ant = [
-                        # self.s[scenario, "inputs", 0, "Pbc"]
-                        # - self.s[subscenario, "inputs", 0, "Pbc"],
-                        # self.s[scenario, "inputs", 0, "Pbd"]
-                        # - self.s[subscenario, "inputs", 0, "Pbd"],
-                        self.s[scenario, "inputs", 0, "Pgb"]
-                        - self.s[subscenario, "inputs", 0, "Pgb"],
-                        self.s[scenario, "inputs", 0, "Pgs"]
-                        - self.s[subscenario, "inputs", 0, "Pgs"],
+                        self.s[scenario, "inputs", 0, "Pbc"]
+                        - self.s[subscenario, "inputs", 0, "Pbc"],
+                        self.s[scenario, "inputs", 0, "Pbd"]
+                        - self.s[subscenario, "inputs", 0, "Pbd"],
+                        # self.s[scenario, "inputs", 0, "Pgb"]
+                        # - self.s[subscenario, "inputs", 0, "Pgb"],
+                        # self.s[scenario, "inputs", 0, "Pgs"]
+                        # - self.s[subscenario, "inputs", 0, "Pgs"],
                     ]
                     g += g_ant
                     lbg += [0] * len(g_ant)

@@ -100,14 +100,6 @@ def is_zero(x):
 
 
 def surplus_adjuster(e_hold, u):
-    if e_hold >= u[1]:
-        e_hold -= u[1]
-        u[1] = 0
-    else:
-        u[1] -= e_hold
-        e_hold = 0
-        return u
-
     if e_hold >= u[2]:
         e_hold -= u[2]
         u[2] = 0
@@ -117,20 +109,12 @@ def surplus_adjuster(e_hold, u):
         return u
 
     # Battery absorbs the rest of the surplus
-    u[0] += e_hold
+    u[3] += e_hold
     return u
 
 
 def deficit_adjuster(e_hold, u):
     e_hold = np.abs(e_hold)
-    if e_hold >= u[0]:
-        e_hold -= u[0]
-        u[0] = 0
-    else:
-        u[0] -= e_hold
-        e_hold = 0
-        return u
-
     if e_hold >= u[3]:
         e_hold -= u[3]
         u[3] = 0
@@ -140,7 +124,7 @@ def deficit_adjuster(e_hold, u):
         return u
 
     # Battery cover the rest with discharge
-    u[1] += e_hold
+    u[2] += e_hold
     return u
 
 

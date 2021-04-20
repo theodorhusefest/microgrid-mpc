@@ -228,7 +228,7 @@ def scenario_mpc():
             lbs["scenario" + str(i), "states", 0, "SOC"] = B.get_SOC(openloop)
             ubs["scenario" + str(i), "states", 0, "SOC"] = B.get_SOC(openloop)
 
-            for k in range(N):
+            for k in range(N - 1):
                 s_data["scenario" + str(i), "data", k, "pv"] = pv_scenarios[i][k]
                 s_data["scenario" + str(i), "data", k, "l"] = l_scenarios[i][k]
                 s_data["scenario" + str(i), "data", k, "E"] = 1
