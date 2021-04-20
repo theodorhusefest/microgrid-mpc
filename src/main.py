@@ -77,8 +77,8 @@ def scenario_mpc():
         & (observations["date"] <= current_time + timedelta(minutes=10 * N))
     ]
 
+    E = pd.read_csv(conf["price_file"], parse_dates=["time"])
     l = Load(N, testfile, "L", groundtruth=trainfile)
-    E = np.ones(2000)  # get_spot_price()
     B = Battery(T, N, **conf["battery"])
     PV = LinearPhotovoltaic(trainfile)
 
@@ -90,6 +90,7 @@ def scenario_mpc():
     pv_measured = []
     l_measured = []
     errors = []
+    E_measured = []
     c_violations = 0
 
     prediction_time = 0
@@ -103,10 +104,6 @@ def scenario_mpc():
     load_errors = pd.read_csv("./data/load_errors.csv").drop(["Unnamed: 0"], axis=1)
     load_errors = load_errors[~np.isnan(load_errors).any(axis=1)]
     load_errors = shuffle_dataframe(load_errors).values
-    pv_errors = pd.read_csv("./data/pv_errors.csv").drop(["Unnamed: 0"], axis=1)
-    pv_errors = pv_errors[~np.isnan(pv_errors).any(axis=1)]
-    pv_errors = shuffle_dataframe(pv_errors).values
-
     l_min = np.min(load_errors, axis=0)
     l_max = np.max(load_errors, axis=0)
 
@@ -131,9 +128,6 @@ def scenario_mpc():
         pv_true = obs["PV"].values[0]
         l_true = obs["L"].values[0]
 
-        pv_measured.append(pv_true)
-        l_measured.append(l_true)
-
         # Get new forecasts every hour
         if current_time.minute == 30:
             new_forecast = solcast_forecasts[
@@ -149,6 +143,11 @@ def scenario_mpc():
             & (forecast["time"] <= current_time + timedelta(minutes=10 * (N)))
         ]
 
+        E_prediction = E[
+            (E.time > current_time)
+            & (E.time <= current_time + timedelta(minutes=10 * (N)))
+        ].price.values
+
         # Get predictions
         if perfect_predictions:
             pv_prediction = obs["PV"].values[1:]
@@ -158,10 +157,7 @@ def scenario_mpc():
             pv_prediction = PV.predict(
                 ref.temp.values, ref.GHI.values, obs["PV"].iloc[0]
             )
-            # l_prediction = l.scaled_mean_pred(l_true, step % (144 - N))
-            # l_prediction = l.get_prediction_mean(step % (144 - N))
             l_prediction = l.get_previous_day(current_time, l_true)
-
             prediction_time += time.time() - pred_time
 
         if N_scenarios == 1:
@@ -231,7 +227,7 @@ def scenario_mpc():
             for k in range(N - 1):
                 s_data["scenario" + str(i), "data", k, "pv"] = pv_scenarios[i][k]
                 s_data["scenario" + str(i), "data", k, "l"] = l_scenarios[i][k]
-                s_data["scenario" + str(i), "data", k, "E"] = 1
+                s_data["scenario" + str(i), "data", k, "E"] = E_prediction[i]
                 s_data["scenario" + str(i), "data", k, "prob"] = prob[i]
 
         sol_time = time.time()
@@ -245,6 +241,10 @@ def scenario_mpc():
             (observations["date"] >= current_time)
             & (observations["date"] <= current_time + timedelta(minutes=10 * N))
         ]
+
+        pv_measured.append(pv_true)
+        l_measured.append(l_true)
+        E_measured.append(E_prediction[0])
 
         e, uk = utils.calculate_real_u(
             xk_opt, Uk_opt, obs["PV"].values[0], obs["L"].values[0]
@@ -265,7 +265,11 @@ def scenario_mpc():
         ):
             c_violations += 1
 
-        sys_metrics.update_metrics([Pbc[-1], Pbd[-1], Pgb[-1], Pgs[-1]], E[-1], e)
+        sys_metrics.update_metrics(
+            [Pbc[-1], Pbd[-1], Pgb[-1], Pgs[-1]],
+            E[E.time == current_time].price.values[0],
+            e,
+        )
 
         utils.print_status(step, [B.get_SOC(openloop)], step_time, every=50)
         step_time = time.time()
@@ -317,7 +321,12 @@ def scenario_mpc():
         logpath=logpath,
     )
 
-    # p.plot_data(np.asarray([E]), title="Spot Prices", legends=["Spotprice"],logpath=logpath)
+    p.plot_data(
+        np.asarray([E_measured]),
+        title="Spot Prices",
+        legends=["Spotprice"],
+        logpath=logpath,
+    )
 
     stop = time.time()
     print("\nFinished optimation in {}s".format(np.around(stop - start_time, 2)))
