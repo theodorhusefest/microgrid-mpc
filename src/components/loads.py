@@ -77,9 +77,17 @@ class Load:
         ][self.column].values
 
         if np.min(pred) > 1 and measurement:
-            weight = np.linspace(0, 1, len(pred) + 1)
-            pred = np.append(np.asarray([measurement]), pred)
-            pred = (weight[::-1] * np.ones_like(pred) * measurement + weight * pred)[1:]
+            pred = self.interpolate_prediction(pred, measurement)
+
+        return pred
+
+    def interpolate_prediction(self, pred, measurement):
+        """
+        Returns a linear combination of prediction and measurement
+        """
+        weight = np.linspace(0, 1, len(pred) + 1)
+        pred = np.append(np.asarray([measurement]), pred)
+        pred = (weight[::-1] * np.ones_like(pred) * measurement + weight * pred)[1:]
         return pred
 
     def get_measurement(self, step):

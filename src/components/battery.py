@@ -5,11 +5,12 @@ from casadi import SX, Function, vertcat
 
 
 class Battery:
-    def __init__(self, T, N, x_initial, nb, C_MAX):
+    def __init__(self, T, N, x_initial, nb_c, nb_d, C_MAX):
 
         self.xk_sim = x_initial
         self.xk_opt = x_initial
-        self.nb = nb
+        self.nb_c = nb_c
+        self.nb_d = nb_d
         self.C_MAX = C_MAX
 
         self.T = T
@@ -18,7 +19,9 @@ class Battery:
         self.x = SX.sym("x")
         self.u = SX.sym("u", 2)
 
-        self.ode = (1 / self.C_MAX) * (self.nb * self.u[0] - self.u[1] / self.nb)
+        self.ode = (1 / self.C_MAX) * (
+            (self.nb_c * self.u[0]) - (self.u[1] / self.nb_d)
+        )
         self.F = self.create_integrator()
 
         self.x_opt = [x_initial]

@@ -60,9 +60,7 @@ class ScenarioOCP:
                 entry("prob"),
             ]
         )
-        self.all_data = struct_symSX(
-            [entry("data", struct=self.data, repeat=self.N - 1)]
-        )
+        self.all_data = struct_symSX([entry("data", struct=self.data, repeat=self.N)])
 
         scenarios = []
         s_data = []
@@ -107,7 +105,7 @@ class ScenarioOCP:
         Returns the objective function.
         """
         return (1 / self.C_MAX) * (
-            (self.nb_c * self.inputs["Pbc"]) - self.inputs["Pbd"]
+            (self.nb_c * self.inputs["Pbc"]) - (self.inputs["Pbd"] / self.nb_d)
         )
 
     def build_integrator(self):
@@ -138,20 +136,18 @@ class ScenarioOCP:
             self.s[scenario, "inputs", k, "Pbc"] + self.s[scenario, "inputs", k, "Pbd"]
         )
 
+        J_scen += self.s_data[scenario, "data", k, "E"] * (
+            self.s[scenario, "inputs", k, "Pgb"]
+            - 0.9 * self.s[scenario, "inputs", k, "Pgs"]
+        )
         J_scen += (
-            1000
-            * self.s_data[scenario, "data", k, "E"]
+            self.grid_cost
             * (
                 self.s[scenario, "inputs", k, "Pgb"]
-                - 0.9 * self.s[scenario, "inputs", k, "Pgs"]
+                + self.s[scenario, "inputs", k, "Pgs"]
             )
+            ** 2
         )
-        if k == self.N - 2:
-            J_scen += (
-                1000
-                * self.s_data[scenario, "data", k, "E"]
-                * (self.x_max - self.s[scenario, "states", k, "SOC"])
-            )
         return J_scen
 
     def build_scenario_ocp(self, root=None):
@@ -199,7 +195,15 @@ class ScenarioOCP:
                 lbg += [0] * len(eq_con)
                 ubg += [0] * len(eq_con)
 
-            J += self.s_data[scenario, "data", k, "prob"] * J_scen
+            # Add terminal cost
+            J += (
+                6
+                * self.s_data[scenario, "data", self.N - 1, "E"]
+                * (1 - self.s[scenario, "states", self.N - 1, "SOC"])
+            )
+
+            J += self.s_data[scenario, "data", 0, "prob"] * J_scen
+
         # Non-anticipativity constraints
         if root:
             to_explore = [root]

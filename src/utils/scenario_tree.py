@@ -76,7 +76,7 @@ def build_scenario_tree(N, Nr, branching, pv_ref, pv_std, l_ref, l_std):
     while to_explore:
         current = to_explore.pop(0)
         b = b_factor[current.level]
-        assert b <= 3, "Branching factor over three not allowed."
+        #assert b <= 3, "Branching factor over three not allowed."
         for j in range(b):
             pv_k = pv_ref[current.level + 1] - pv_ref[current.level]
             l_k = l_ref[current.level + 1] - l_ref[current.level]

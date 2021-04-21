@@ -60,7 +60,7 @@ def scenario_mpc():
 
     # Get data
     observations = pd.read_csv(testfile, parse_dates=["date"]).fillna(0)
-    observations = observations[observations["date"] >= datetime(2021, 3, 30)]
+    observations = observations[observations["date"] >= datetime(2021, 4, 2)]
     solcast_forecasts = pd.read_csv(
         conf["solcast_file"], parse_dates=["time", "collected"]
     ).fillna(0)
@@ -99,7 +99,7 @@ def scenario_mpc():
     solver_time = 0
 
     # Initilize Montecarlo
-    N_sim = 3
+    N_sim = 9
     monte_carlo = njit()(monte_carlo_simulations)
     load_errors = pd.read_csv("./data/load_errors.csv").drop(["Unnamed: 0"], axis=1)
     load_errors = load_errors[~np.isnan(load_errors).any(axis=1)]
@@ -167,46 +167,49 @@ def scenario_mpc():
         elif True:
             pv_upper = PV.predict(ref.temp.values, ref.GHI90.values, obs["PV"].iloc[0])
             pv_lower = PV.predict(ref.temp.values, ref.GHI10.values, obs["PV"].iloc[0])
-            pv_scenarios = [pv_upper, pv_prediction, pv_lower]
 
-            # l_sims = monte_carlo_simulations(N, N_sim, l_prediction, load_errors)
+            l_lower = l.interpolate_prediction(l_prediction + l_min, l_true)
+            l_upper = l.interpolate_prediction(l_prediction + l_max, l_true)
 
-            l_scenarios = [l_prediction + l_min, l_prediction, l_prediction + l_max]
+            if N_scenarios == 9:
+                pv_scenarios = [
+                    pv_upper,
+                    pv_upper,
+                    pv_upper,
+                    pv_prediction,
+                    pv_prediction,
+                    pv_prediction,
+                    pv_lower,
+                    pv_lower,
+                    pv_lower,
+                ]
+                l_scenarios = [
+                    l_lower,
+                    l_prediction,
+                    l_upper,
+                    l_lower,
+                    l_prediction,
+                    l_upper,
+                    l_lower,
+                    l_prediction,
+                    l_upper,
+                ]
+                prob = [
+                    0.2 * 0.2,
+                    0.2 * 0.6,
+                    0.2 * 0.2,
+                    0.6 * 0.2,
+                    0.6 * 0.6,
+                    0.2 * 0.2,
+                    0.2 * 0.2,
+                    0.6 * 0.2,
+                    0.2 * 0.2,
+                ]
 
-            prob = [0.2, 0.6, 0.2]
-
-        elif True:
-            sim_time = time.time()
-            pv_sims = np.clip(
-                monte_carlo_simulations(N, N_sim, pv_prediction, pv_errors), 0, np.inf
-            )
-            l_sims = np.clip(
-                monte_carlo_simulations(N, N_sim, l_prediction, load_errors), 0, np.inf
-            )
-
-            simulation_time += time.time() - sim_time
-
-            red_time = time.time()
-            # pv_scenarios = scenario_reduction(pv_sims, N, Nr, branch_factor)
-            # l_scenarios = scenario_reduction(l_sims, N, Nr, branch_factor)[::-1]
-
-            pv_scenarios = np.sort(pv_sims, axis=0)
-            l_scenarios = np.sort(l_sims, axis=0)
-
-            reduction_time += time.time() - red_time
-
-        else:
-            _, leaf_nodes = build_scenario_tree(
-                N,
-                Nr,
-                branch_factor,
-                np.append(np.asarray([obs["PV"].iloc[0]]), pv_prediction),
-                25,
-                np.append(np.asarray([obs["L"].iloc[0]]), l_prediction),
-                25,
-            )
-            pv_scenarios = get_scenarios(leaf_nodes, "pv")
-            l_scenarios = get_scenarios(leaf_nodes, "l")
+            elif N_scenarios == 3:
+                pv_scenarios = [pv_upper, pv_prediction, pv_lower]
+                l_scenarios = [l_lower, l_prediction, l_upper]
+                prob = [0.2, 0.6, 0.2]
 
         if step % N == 0:
             for i in range(len(pv_scenarios)):
@@ -224,10 +227,12 @@ def scenario_mpc():
             lbs["scenario" + str(i), "states", 0, "SOC"] = B.get_SOC(openloop)
             ubs["scenario" + str(i), "states", 0, "SOC"] = B.get_SOC(openloop)
 
-            for k in range(N - 1):
+            for k in range(N):
                 s_data["scenario" + str(i), "data", k, "pv"] = pv_scenarios[i][k]
                 s_data["scenario" + str(i), "data", k, "l"] = l_scenarios[i][k]
-                s_data["scenario" + str(i), "data", k, "E"] = E_prediction[k]
+                s_data["scenario" + str(i), "data", k, "E"] = (
+                    E_prediction[k] / actions_per_hour
+                )
                 s_data["scenario" + str(i), "data", k, "prob"] = prob[i]
 
         sol_time = time.time()
@@ -260,14 +265,14 @@ def scenario_mpc():
         B.simulate_SOC(xk_opt, [uk[0], uk[1]])
 
         if (
-            B.get_SOC(openloop) < conf["system"]["x_min"]
-            or B.get_SOC(openloop) > conf["system"]["x_max"]
+            B.get_SOC(openloop) < 0.18  # conf["system"]["x_min"]
+            or B.get_SOC(openloop) > 0.82  # conf["system"]["x_max"]
         ):
             c_violations += 1
 
         sys_metrics.update_metrics(
             [Pbc[-1], Pbd[-1], Pgb[-1], Pgs[-1]],
-            E[E.time == current_time].price.values[0],
+            E[E.time == current_time].price.values[0] / actions_per_hour,
             e,
         )
 

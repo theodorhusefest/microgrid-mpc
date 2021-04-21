@@ -96,7 +96,7 @@ def check_constrain_satisfaction(u0, u1, u2, u3, pv, l):
 
 
 def is_zero(x):
-    return np.around(x, 3) == 0
+    return np.around(x, 2) == 0
 
 
 def surplus_adjuster_bat(e_hold, u):
@@ -166,12 +166,12 @@ def calculate_real_u(x, u, pv, l):
     if is_zero(e):
         pass
     elif e > 0:  # Suplus of energy
-        if x > 0.78:
+        if x > 0.75:
             u = surplus_adjuster_grid(e, u)
         else:
             u = surplus_adjuster_bat(e, u)
     else:  # Need more energy
-        if x < 0.22:
+        if x < 0.25:
             u = deficit_adjuster_grid(e, u)
         else:
             u = deficit_adjuster_bat(e, u)

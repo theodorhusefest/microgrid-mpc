@@ -1,4 +1,4 @@
-simulation_horizon: 40 # hours
+simulation_horizon: 100 # hours
 prediction_horizon: 10 # hours
 robust_horizon: 1 # steps
 branch_factor: 1
@@ -13,20 +13,22 @@ openloop: False
 perfect_predictions: True
 
 battery:
-  x_initial: 0.6
+  x_initial: 0.3
   C_MAX: 1000
-  nb: 0.913724
+  nb_c: 0.913724
+  nb_d: 0.95
+
 
 system:
   C_MAX: 1000
   nb_c: 0.913724
-  nb_d: 0.87
+  nb_d: 0.95
   x_min: 0.2
   x_max: 0.8
   x_ref: 0.6
   Pb_max: 1000
-  Pg_max: 1000
-  battery_cost: 0
-  grid_cost: 10
+  Pg_max: 400
+  battery_cost: 0.01
+  grid_cost: 0
   ref_cost: 1
   verbose: False

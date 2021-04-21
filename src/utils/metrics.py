@@ -6,7 +6,7 @@ class SystemMetrics:
     def __init__(self, actions_per_hour=6):
 
         self.actions_per_hour = actions_per_hour
-        self.battery_deg = 0.128
+        self.battery_deg = 0.01
 
         self.grid_cost = 0
         self.battery_cost = 0
@@ -50,11 +50,8 @@ class SystemMetrics:
         """
         Updates all metrics
         """
-
         self.grid_cost += spot_price * (U[2] - 0.9 * U[3]) / self.actions_per_hour
-        self.battery_cost += (
-            self.battery_deg * (np.sum(np.abs([U[0:1]]))) / self.actions_per_hour
-        )
+        self.battery_cost += self.battery_deg * (U[0] + U[1]) / self.actions_per_hour
         self.grid_max = np.max([self.grid_max, U[2]])
         self.accumulated_error += np.abs(e)
 
