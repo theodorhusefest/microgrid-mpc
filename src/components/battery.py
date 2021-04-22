@@ -47,7 +47,7 @@ class Battery:
         """
         Returns the simulated SOC
         """
-        Fk = self.F(x0=x, p=uk)
+        Fk = self.F(x0=self.xk_sim, p=uk)
         self.xk_sim = Fk["xf"].full().flatten()[0]
 
         self.x_opt.append(x)
