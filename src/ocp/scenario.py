@@ -276,11 +276,31 @@ class ScenarioOCP:
         )
         s_opt = sol["x"].full().flatten()
         s_opt = self.s(s_opt)
+        i = self.N_scenarios - 1
 
+        """
         self.SOC = np.append(self.SOC, s_opt["scenario" + str(0), "states", 1, "SOC"])
         self.Pbc = np.append(self.Pbc, s_opt["scenario" + str(0), "inputs", 0, "Pbc"])
         self.Pbd = np.append(self.Pbd, s_opt["scenario" + str(0), "inputs", 0, "Pbd"])
         self.Pgb = np.append(self.Pgb, s_opt["scenario" + str(0), "inputs", 0, "Pgb"])
         self.Pgs = np.append(self.Pgs, s_opt["scenario" + str(0), "inputs", 0, "Pgs"])
+        """
+        u1 = []
+        u2 = []
+        u3 = []
+        u4 = []
+        soc = []
+        for i in range(self.N_scenarios):
+            u1.append(s_opt["scenario" + str(i), "inputs", 0, "Pbc"])
+            u2.append(s_opt["scenario" + str(i), "inputs", 0, "Pbd"])
+            u3.append(s_opt["scenario" + str(i), "inputs", 0, "Pgb"])
+            u4.append(s_opt["scenario" + str(i), "inputs", 0, "Pgs"])
+            soc.append(s_opt["scenario" + str(0), "states", 1, "SOC"])
+
+        self.SOC = np.append(self.SOC, np.mean(soc))
+        self.Pbc = np.append(self.Pbc, np.mean(u1))
+        self.Pbd = np.append(self.Pbd, np.mean(u2))
+        self.Pgb = np.append(self.Pgb, np.mean(u3))
+        self.Pgs = np.append(self.Pgs, np.mean(u4))
 
         return self.get_SOC_opt(), self.get_u_opt()

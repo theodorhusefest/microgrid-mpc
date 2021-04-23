@@ -99,7 +99,7 @@ def scenario_mpc():
     solver_time = 0
 
     # Initilize Montecarlo
-    N_sim = 9
+    N_sim = 100
     monte_carlo = njit()(monte_carlo_simulations)
     load_errors = pd.read_csv("./data/load_errors.csv").drop(["Unnamed: 0"], axis=1)
     load_errors = load_errors[~np.isnan(load_errors).any(axis=1)]
@@ -168,6 +168,10 @@ def scenario_mpc():
             pv_upper = PV.predict(ref.temp.values, ref.GHI90.values, obs["PV"].iloc[0])
             pv_lower = PV.predict(ref.temp.values, ref.GHI10.values, obs["PV"].iloc[0])
 
+            l_sims = monte_carlo(N, N_sim, l_prediction, load_errors)
+            l_min = np.min(l_sims, axis=0)
+            l_max = np.max(l_sims, axis=0)
+
             l_lower = l.interpolate_prediction(l_prediction + l_min, l_true)
             l_upper = l.interpolate_prediction(l_prediction + l_max, l_true)
 
@@ -207,6 +211,7 @@ def scenario_mpc():
                 ]
 
             elif N_scenarios == 3:
+
                 pv_scenarios = [pv_upper, pv_prediction, pv_lower]
                 l_scenarios = [l_lower, l_prediction, l_upper]
                 prob = [0.2, 0.6, 0.2]

@@ -1,13 +1,12 @@
-simulation_horizon: 100 # hours
+simulation_horizon: 100  # hours
 prediction_horizon: 10 # hours
 robust_horizon: 1 # steps
 branch_factor: 1
 
-
 actions_per_hour: 6
 logpath: "./logs/"
-testfile: "./data/8.4_cleaned.csv"
-trainfile: "./data/8.4_train.csv"
+testfile: "./data/23.4_cleaned.csv"
+trainfile: "./data/23.4_train.csv"
 solcast_file: "./data/solcast_cleaned.csv"
 price_file: "./data/spot_prices.csv"
 openloop: False
@@ -30,6 +29,6 @@ system:
   Pb_max: 1000
   Pg_max: 1000
   battery_cost: 0.01
-  grid_cost: 0
+  grid_cost: 0.001
   ref_cost: 1
   verbose: False

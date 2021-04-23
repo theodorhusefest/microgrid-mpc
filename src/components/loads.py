@@ -65,7 +65,7 @@ class Load:
 
         return self.true[step : step + self.N + 1][1:]
 
-    def get_previous_day(self, current_time, measurement):
+    def get_previous_day(self, current_time, measurement=None):
         """
         Returns the same values the day before
         """
