@@ -33,37 +33,6 @@ def create_logs_folder(rootdir="./logs/", foldername=""):
     return folderpath
 
 
-def load_data():
-    """"""
-
-    conf = parse_config()
-    datafile = conf["datafile"]
-
-    data = pd.read_csv(datafile)
-    if "L1" in data.columns:
-        L1 = data.L1.to_numpy()
-        L2 = data.L2.to_numpy()
-    else:
-        L = data.L.to_numpy()
-    PV = data.PV.to_numpy()
-
-    if "Spot_pris" in data.columns:
-        grid_buy = data.Spot_pris.to_numpy()
-    else:
-        grid_buy = 1.5
-
-    if "PV_pred" not in data.columns:
-        PV_pred = PV.copy()
-        L1_pred = L1.copy()
-        L2_pred = L2.copy()
-    else:
-        PV_pred = data.PV_pred.to_numpy()
-        L1_pred = data.L1_pred.to_numpy()
-        L2_pred = data.L2_pred.to_numpy()
-
-    return [PV, PV_pred, L1, L1_pred, L2, L2_pred, grid_buy]
-
-
 def print_status(step, X, step_time, every=50):
     if step % every == 0:
         print("\nSTATUS - STEP {}".format(step))
@@ -87,16 +56,22 @@ def create_datafile(signals, names=[], logpath=None):
     return df
 
 
-def check_constrain_satisfaction(u0, u1, u2, u3, pv, l):
-    residual = -u0 + u1 + u2 - u3 + pv - l
-
-    if residual > 1:
-        print("Constraint breached")
-        raise ValueError
-
-
 def is_zero(x):
     return np.around(x, 2) == 0
+
+
+def get_scenario_from_file(scenarios, step, type_, filter_):
+    return (
+        scenarios[(scenarios.i == (step % 144)) & (scenarios.type == type_)]
+        .filter(filter_)
+        .values.flatten()
+    )
+
+
+def get_probability_from_file(scenarios, step, type_, filter_):
+    return scenarios[(scenarios["i"] == (step % 144)) & (scenarios.type == type_)][
+        "prob"
+    ].values[0]
 
 
 def surplus_adjuster_bat(e_hold, u):
@@ -161,6 +136,8 @@ def primary_controller(x, u, pv, l):
     """
     Calculates the real inputs based on topology contraint
     """
+
+    u = np.copy(uk)
     e = -u[0] + u[1] + u[2] - u[3] + pv - l
 
     if is_zero(e):
@@ -208,28 +185,10 @@ def calculate_real_u_top(Uk, Tk, wt, pv, l1, l2):
             Uk[1] += L_error - Uk[0]
             Uk[0] = 0
         else:
-            Uk[1] += L_error
-
-    elif L_error < 0:  # Energy deficit in load-node
-        L_error = np.abs(L_error)
-        Tk[2] += L_error
-        Tk[1] += L_error
-
-        if is_active(Uk[1]) and Uk[1] > L_error:
-            Uk[1] -= L_error
-        elif is_active(Uk[1]):
-            Uk[0] += L_error - Uk[1]
-            Uk[1] = 0
+            u = surplus_adjuster_bat(e, u)
+    else:  # Need more energy
+        if x < 0.25:
+            u = deficit_adjuster_grid(e, u)
         else:
-            Uk[0] += L_error
-
-    assert np.around(wt + pv + Uk[6] - Uk[7] - Tk[0], 2) == 0
-    assert np.around(Tk[0] + Tk[1] - Tk[2], 2) == 0
-    assert np.around(Uk[0] - Uk[1] + Uk[2] - Uk[3] + Uk[4] - Uk[5] - Tk[1], 2) == 0
-    assert np.around(Tk[2] - l1 - l2, 2) == 0
-
-    return Uk, Tk
-
-
-def is_active(x):
-    return np.around(x, 3) != 0
+            u = deficit_adjuster_bat(e, u)
+    return e, u

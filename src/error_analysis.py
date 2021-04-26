@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from components.loads import Load
 from components.PV import Photovoltaic, LinearPhotovoltaic
 from statsmodels.stats.diagnostic import lilliefors
+from sklearn.metrics import mean_squared_error
 
 
 def load_analysis(data, L, method, plot=True):
@@ -56,20 +57,26 @@ def load_analysis(data, L, method, plot=True):
 def load_analysis_2(N, L, data, plot=True):
     error_df = pd.DataFrame()
 
+    rmse = []
+
     for i in range(144, data.shape[0] - N):
         current_time = data.date[i]
-        L_pred = L.get_previous_day(current_time, data.L.iloc[i])
         L_true = data[
             (data["date"] > current_time)
             & (data["date"] <= (current_time + timedelta(minutes=10 * N)))
         ][L.column].values
+
+        L_pred = L.get_previous_day(current_time, data.L.iloc[i])
+
         error_df[i - 144] = L_true - L_pred
+        rmse.append(np.sqrt(mean_squared_error(L_true, L_pred)))
 
     error_df = error_df.transpose()
-    error_df = error_df[
-        (error_df < np.percentile(error_df, 95))
-        & (error_df > np.percentile(error_df, 5))
-    ]
+
+    # error_df = error_df[
+    #    (error_df < np.percentile(error_df, 90))
+    # & (error_df > np.percentile(error_df, 10))
+    # ]
     if plot:
         print("****** Load statistics ******")
         print(error_df.describe())
@@ -83,7 +90,8 @@ def load_analysis_2(N, L, data, plot=True):
         # plot_daily_errors(error_df.values, "PV")
         plot_error_hist(error_df.values, "Load")
         plt.show()
-
+    error_df["date"] = data.date.iloc[144 : data.shape[0] - N].values
+    error_df["rmse"] = rmse
     return error_df
 
 
@@ -95,7 +103,7 @@ def pv_analysis(N, pv, data, forecasts, plot=True):
     forecast = forecasts[
         forecasts["collected"] == data.date.iloc[0] - timedelta(minutes=60)
     ]
-
+    rmse = []
     for i in range(data.shape[0] - N):
         current_time = data.date[i]
         if current_time.minute == 30:
@@ -127,16 +135,18 @@ def pv_analysis(N, pv, data, forecasts, plot=True):
         # plt.plot(df.index, df["PV"], color="blue")
         # plt.plot(df.index, df["PV_pred"], color="red")
         error = df["PV"] - df["PV_pred"]
+        rmse.append(np.sqrt(mean_squared_error(df["PV"], df["PV_pred"])))
         # error = np.divide(
         #    error, df["PV"], out=np.zeros_like(error), where=df["PV"] != 0
         # )
         error_df[i] = error
 
     error_df = error_df.transpose()
-    error_df = error_df[
-        (error_df < np.percentile(error_df, 95))
-        & (error_df > np.percentile(error_df, 5))
-    ]
+    # error_df = error_df[
+    #    (error_df < np.percentile(error_df, 95))
+    #    # & (error_df > np.percentile(error_df, 5))
+    # ]
+
     if plot:
         print("****** PV statistics ******")
         print(error_df.describe())
@@ -150,7 +160,10 @@ def pv_analysis(N, pv, data, forecasts, plot=True):
         # plot_daily_errors(error_df.values, "PV")
         plot_error_hist(error_df.values, "PV")
         plt.show()
-
+    print(data.shape)
+    print(error_df.shape)
+    error_df["date"] = data.date
+    error_df["rmse"] = rmse
     return error_df
 
 
@@ -232,40 +245,38 @@ def estimate_errors(N, PV, train_file, test_file, forecast_file, stopdate=None):
         stopdate = datetime(2100, 12, 30)
     L = Load(N, train_file, "L")
     test_data = pd.read_csv(train_file, parse_dates=["date"])
-    load_errors = load_analysis_2(N, L, test_data, plot=True)
+    load_errors = load_analysis_2(N, L, test_data, plot=False)
 
     observations = pd.read_csv(train_file, parse_dates=["date"]).fillna(0)
     solcast_forecasts = pd.read_csv(
         forecast_file, parse_dates=["time", "collected"]
     ).fillna(0)
-    # solcast_forecasts = solcast_forecasts[
-    #    (solcast_forecasts["collected"] >= observations.date.iloc[0])
-    #    & (solcast_forecasts["time"] < stopdate)
-    # ]
 
     pv_errors = pv_analysis(
         N,
         PV,
         observations,
         solcast_forecasts,
-        plot=True,
+        plot=False,
     )
 
     pv_errors = pv_errors.loc[~(pv_errors == 0).all(axis=1)]
-    load_errors = load_errors.loc[~(load_errors == 0).all(axis=1)]
 
-    pv_errors.to_csv("./data/pv_errors.csv")
-    load_errors.to_csv("./data/load_errors.csv")
+    # load_errors = load_errors.loc[~(load_errors == 0).all(axis=1)]
 
-    return pv_errors, load_errors
+    pv_errors.to_csv("./data/pv_errors_date.csv")
+    load_errors.to_csv("./data/load_errors_date.csv")
+
+    # return pv_errors, load_errors
 
 
 if __name__ == "__main__":
-    train_file = "./data/8.4_train.csv"
+    train_file = "./data/23.4_train.csv"
+    test_file = "./data/23.4_test.csv"
     estimate_errors(
         60,
-        LinearPhotovoltaic("./data/8.4_train.csv"),
-        "./data/8.4_test.csv",
+        LinearPhotovoltaic(train_file),
+        test_file,
         train_file,
         "./data/solcast_cleaned.csv",
     )

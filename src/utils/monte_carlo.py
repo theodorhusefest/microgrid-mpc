@@ -11,7 +11,7 @@ from components.PV import Photovoltaic
 
 def monte_carlo_simulations(N, N_sim, forecast, errors):
     sims = np.zeros((N_sim, N))
-    errors = np.c_[errors, np.zeros((errors.shape[0], N - errors.shape[1]))]
+    # errors = np.c_[errors, np.zeros((errors.shape[0], N - errors.shape[1]))]
 
     if forecast.all() == 0:
         return sims
