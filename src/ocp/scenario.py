@@ -148,10 +148,11 @@ class ScenarioOCP:
             )
             ** 2
         )
-        J_scen += 71 * (
+        J_scen += 70 * (
             self.s[scenario, "states", k + 1, "Pgb_p"]
             - self.s[scenario, "states", k, "Pgb_p"]
         )
+
         return J_scen
 
     def build_scenario_ocp(self, root=None):
@@ -186,33 +187,44 @@ class ScenarioOCP:
                 Xk_end = Fk["xf"]
 
                 J_scen += self.add_stage_cost(scenario, k)
+                # ineq_con = vertcat(
+                #    self.s[scenario, "inputs", k, "Pgb"],
+                #    self.s[scenario, "states", k, "Pgb_p"],
+                # )
+
+                # lbs[scenario, "states", k + 1, "Pgb_p"] = ineq_con
+
                 eq_con = [
                     Xk_end - self.s[scenario, "states", k + 1, "SOC"],
+                    self.s[scenario, "states", k + 1, "Pgb_p"]
+                    - 0.5
+                    * (
+                        self.s[scenario, "states", k, "Pgb_p"]
+                        + self.s[scenario, "inputs", k, "Pgb"]
+                        + sqrt(
+                            (
+                                self.s[scenario, "states", k, "Pgb_p"]
+                                - self.s[scenario, "inputs", k, "Pgb"]
+                            )
+                            ** 2
+                            + 1
+                        )
+                    ),
                     -self.s[scenario, "inputs", k, "Pbc"]
                     + self.s[scenario, "inputs", k, "Pbd"]
                     + self.s[scenario, "inputs", k, "Pgb"]
                     - self.s[scenario, "inputs", k, "Pgs"]
                     + self.s_data[scenario, "data", k, "pv"]
                     - self.s_data[scenario, "data", k, "l"],
-                    self.s[scenario, "states", k + 1, "Pgb_p"]
-                    - fmax(
-                        self.s[scenario, "states", k, "Pgb_p"],
-                        self.s[scenario, "inputs", k, "Pgb"],
-                    ),
                 ]
                 g += eq_con
                 lbg += [0] * len(eq_con)
                 ubg += [0] * len(eq_con)
 
             # Add terminal cost
-            J += (
-                6
-                * self.s_data[scenario, "data", self.N - 1, "E"]
-                * (1 - self.s[scenario, "states", self.N - 1, "SOC"])
-            )
+            J_scen += 500 * (0.5 - self.s[scenario, "states", self.N - 1, "SOC"]) ** 2
 
             J += self.s_data[scenario, "data", 0, "prob"] * J_scen
-
         # Non-anticipativity constraints
         if root:
             to_explore = [root]
@@ -284,7 +296,9 @@ class ScenarioOCP:
             p=data,
         )
         s_opt = sol["x"].full().flatten()
+        j_opt = sol["g"].full().flatten()
         s_opt = self.s(s_opt)
+        # print(j_opt)
 
         i = 0
         self.SOC = np.append(self.SOC, s_opt["scenario" + str(i), "states", 1, "SOC"])
@@ -293,6 +307,11 @@ class ScenarioOCP:
         self.Pgb = np.append(self.Pgb, s_opt["scenario" + str(i), "inputs", 0, "Pgb"])
         self.Pgs = np.append(self.Pgs, s_opt["scenario" + str(i), "inputs", 0, "Pgs"])
 
+        # print(s_opt["scenario" + str(i), "states", 1, "Pgb_p"])
+        # print(s_opt["scenario" + str(i), "states", 0, "Pgb_p"])
+        # print(s_opt["scenario" + str(i), "inputs", :, "Pgb"])
+        #        print(ass)
+        # print(s_opt["scenario" + str(i), "states", 1, "SOC"])
         """
         u1 = []
         u2 = []

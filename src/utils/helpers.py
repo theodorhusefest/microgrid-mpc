@@ -132,7 +132,7 @@ def deficit_adjuster_grid(e_hold, u):
     return u
 
 
-def primary_controller(x, u, pv, l):
+def primary_controller(x, uk, pv, l):
     """
     Calculates the real inputs based on topology contraint
     """
@@ -141,54 +141,9 @@ def primary_controller(x, u, pv, l):
     e = -u[0] + u[1] + u[2] - u[3] + pv - l
 
     if is_zero(e):
-        pass
+        return 0, u
     elif e > 0:  # Suplus of energy
         u = surplus_adjuster_grid(e, u)
     else:  # Need more energy
         u = deficit_adjuster_grid(e, u)
-    return e, u
-
-
-def calculate_real_u_top(Uk, Tk, wt, pv, l1, l2):
-
-    gen_error = np.around(wt + pv + Uk[6] - Uk[7] - Tk[0], 2)
-    L_error = np.around(Tk[2] - l1 - l2, 2)
-
-    if gen_error > 0:  # Surplus of energy in gen-node
-        gen_error = np.abs(gen_error)
-        if is_active(Uk[6]) and Uk[6] > gen_error:  # If buying energy buy less
-            Uk[6] -= gen_error
-        elif is_active(Uk[6]):  # Stop buying, then sell remaining
-            Uk[7] += gen_error - Uk[6]
-            Uk[6] = 0
-        else:  # if selling -> sell more
-            Uk[7] += gen_error
-
-    elif gen_error < 0:  # Energy deficit in gen-node
-        gen_error = np.abs(gen_error)
-        if is_active(Uk[7]) and Uk[7] > gen_error:  # If selling -> sell less
-            Uk[7] -= gen_error
-        elif is_active(Uk[7]):
-            Uk[6] += gen_error - Uk[7]
-            Uk[7] = 0
-        else:  # if buying -> buy more
-            Uk[6] += gen_error
-
-    if L_error > 0:  # Surplus of energy in load-node
-        L_error = np.abs(L_error)
-        Tk[2] -= L_error
-        Tk[1] -= L_error
-
-        if is_active(Uk[0]) and Uk[0] > L_error:
-            Uk[0] -= L_error
-        elif is_active(Uk[0]):
-            Uk[1] += L_error - Uk[0]
-            Uk[0] = 0
-        else:
-            u = surplus_adjuster_bat(e, u)
-    else:  # Need more energy
-        if x < 0.25:
-            u = deficit_adjuster_grid(e, u)
-        else:
-            u = deficit_adjuster_bat(e, u)
     return e, u

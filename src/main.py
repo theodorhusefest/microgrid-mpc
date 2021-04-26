@@ -61,7 +61,7 @@ def scenario_mpc():
 
     # Get data
     observations = pd.read_csv(testfile, parse_dates=["date"]).fillna(0)
-    observations = observations[observations["date"] >= datetime(2021, 4, 6)]
+    observations = observations[observations["date"] >= datetime(2021, 4, 7)]
     solcast_forecasts = pd.read_csv(
         conf["solcast_file"], parse_dates=["time", "collected"]
     ).fillna(0)
@@ -92,7 +92,7 @@ def scenario_mpc():
     Pgb = []
 
     Pgb_p_all = []
-    Pgb_p = 0
+    Pgb_p = 1
 
     pv_measured = []
     l_measured = []
@@ -107,7 +107,7 @@ def scenario_mpc():
 
     # Initilize Montecarlo
     N_sim = 100
-    monte_carlo = njit()(monte_carlo_simulations)
+    # monte_carlo = njit()(monte_carlo_simulations)
     load_errors = pd.read_csv("./data/load_errors.csv").drop(["Unnamed: 0"], axis=1)
     load_errors = load_errors[~np.isnan(load_errors).any(axis=1)]
     load_errors = shuffle_dataframe(load_errors).values
@@ -257,13 +257,14 @@ def scenario_mpc():
 
         # Update parameters
         for i in range(N_scenarios):
+            "scenario" + str(i)
             s0["scenario" + str(i), "states", 0, "SOC"] = B.get_SOC(openloop)
             lbs["scenario" + str(i), "states", 0, "SOC"] = B.get_SOC(openloop)
             ubs["scenario" + str(i), "states", 0, "SOC"] = B.get_SOC(openloop)
 
             s0["scenario" + str(i), "states", 0, "Pgb_p"] = Pgb_p
-            # lbs["scenario" + str(i), "states", 0, "Pgb_p"] = Pgb_p
-            # ubs["scenario" + str(i), "states", 0, "Pgb_p"] = Pgb_p
+            lbs["scenario" + str(i), "states", 0, "Pgb_p"] = Pgb_p
+            ubs["scenario" + str(i), "states", 0, "Pgb_p"] = Pgb_p
 
             for k in range(N):
                 s_data["scenario" + str(i), "data", k, "pv"] = pv_scenarios[i][k]
@@ -293,6 +294,7 @@ def scenario_mpc():
             xk_opt, Uk_opt, obs["PV"].values[0], obs["L"].values[0]
         )
 
+
         errors.append(e)
 
         Pbc.append(uk[0])
@@ -301,7 +303,6 @@ def scenario_mpc():
         Pgs.append(uk[3])
 
         B.simulate_SOC(xk_opt, [uk[0], uk[1]])
-
         Pgb_p = np.max([Pgb_p, uk[2]])
         Pgb_p_all.append(Pgb_p)
 
