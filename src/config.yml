@@ -1,4 +1,4 @@
-simulation_horizon: 100 # hours
+simulation_horizon: 30  # hours
 prediction_horizon: 10 # hours
 robust_horizon: 1 # steps
 branch_factor: 1
@@ -30,6 +30,6 @@ system:
   Pb_max: 1000
   Pg_max: 1000
   battery_cost: 0.01
-  grid_cost: 0
+  grid_cost: 0.01
   ref_cost: 1
   verbose: False

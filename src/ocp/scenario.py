@@ -28,7 +28,7 @@ class ScenarioOCP:
         self.ref_cost = conf_system["ref_cost"]
         self.verbose = conf_system["verbose"]
 
-        self.states = struct_symSX([entry("SOC")])
+        self.states = struct_symSX([entry("SOC"), entry("Pgb_p")])
         self.inputs = struct_symSX(
             [
                 entry("Pbc"),
@@ -148,6 +148,10 @@ class ScenarioOCP:
             )
             ** 2
         )
+        J_scen += 71 * (
+            self.s[scenario, "states", k + 1, "Pgb_p"]
+            - self.s[scenario, "states", k, "Pgb_p"]
+        )
         return J_scen
 
     def build_scenario_ocp(self, root=None):
@@ -168,13 +172,14 @@ class ScenarioOCP:
 
             lbs[scenario, "states", :, "SOC"] = self.x_min
             ubs[scenario, "states", :, "SOC"] = self.x_max
+            ubs[scenario, "states", :, "Pgb_p"] = self.Pg_max
             ubs[scenario, "inputs", :, "Pbc"] = self.Pb_max
             ubs[scenario, "inputs", :, "Pbd"] = self.Pb_max
             ubs[scenario, "inputs", :, "Pgs"] = self.Pg_max
             ubs[scenario, "inputs", :, "Pgb"] = self.Pg_max
 
             for k in range(self.N - 1):
-                states_k = self.s[scenario, "states", k]
+                states_k = self.s[scenario, "states", k, "SOC"]
                 inputs_k = self.s[scenario, "inputs", k]
 
                 Fk = F(x0=states_k, p=inputs_k)
@@ -182,15 +187,19 @@ class ScenarioOCP:
 
                 J_scen += self.add_stage_cost(scenario, k)
                 eq_con = [
-                    Xk_end - self.s[scenario, "states", k + 1],
+                    Xk_end - self.s[scenario, "states", k + 1, "SOC"],
                     -self.s[scenario, "inputs", k, "Pbc"]
                     + self.s[scenario, "inputs", k, "Pbd"]
                     + self.s[scenario, "inputs", k, "Pgb"]
                     - self.s[scenario, "inputs", k, "Pgs"]
                     + self.s_data[scenario, "data", k, "pv"]
                     - self.s_data[scenario, "data", k, "l"],
+                    self.s[scenario, "states", k + 1, "Pgb_p"]
+                    - fmax(
+                        self.s[scenario, "states", k, "Pgb_p"],
+                        self.s[scenario, "inputs", k, "Pgb"],
+                    ),
                 ]
-
                 g += eq_con
                 lbg += [0] * len(eq_con)
                 ubg += [0] * len(eq_con)

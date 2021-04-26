@@ -87,6 +87,9 @@ def scenario_mpc():
     Pgs = []
     Pgb = []
 
+    Pgb_p_all = []
+    Pgb_p = 0
+
     pv_measured = []
     l_measured = []
     errors = []
@@ -227,6 +230,10 @@ def scenario_mpc():
             lbs["scenario" + str(i), "states", 0, "SOC"] = B.get_SOC(openloop)
             ubs["scenario" + str(i), "states", 0, "SOC"] = B.get_SOC(openloop)
 
+            s0["scenario" + str(i), "states", 0, "Pgb_p"] = Pgb_p
+            # lbs["scenario" + str(i), "states", 0, "Pgb_p"] = Pgb_p
+            # ubs["scenario" + str(i), "states", 0, "Pgb_p"] = Pgb_p
+
             for k in range(N):
                 s_data["scenario" + str(i), "data", k, "pv"] = pv_scenarios[i][k]
                 s_data["scenario" + str(i), "data", k, "l"] = l_scenarios[i][k]
@@ -251,7 +258,7 @@ def scenario_mpc():
         l_measured.append(l_true)
         E_measured.append(E_prediction[0])
 
-        e, uk = utils.calculate_real_u(
+        e, uk = utils.primary_controller(
             xk_opt, Uk_opt, obs["PV"].values[0], obs["L"].values[0]
         )
 
@@ -263,6 +270,9 @@ def scenario_mpc():
         Pgs.append(uk[3])
 
         B.simulate_SOC(xk_opt, [uk[0], uk[1]])
+
+        Pgb_p = np.max([Pgb_p, uk[2]])
+        Pgb_p_all.append(Pgb_p)
 
         if (
             B.get_SOC(openloop) < 0.18  # conf["system"]["x_min"]
@@ -330,6 +340,13 @@ def scenario_mpc():
         np.asarray([E_measured]),
         title="Spot Prices",
         legends=["Spotprice"],
+        logpath=logpath,
+    )
+
+    p.plot_data(
+        np.asarray([Pgb_p_all]),
+        title="Peak Power",
+        legends=["Peak Power"],
         logpath=logpath,
     )
 

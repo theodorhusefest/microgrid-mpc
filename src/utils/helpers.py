@@ -157,7 +157,7 @@ def deficit_adjuster_grid(e_hold, u):
     return u
 
 
-def calculate_real_u(x, u, pv, l):
+def primary_controller(x, u, pv, l):
     """
     Calculates the real inputs based on topology contraint
     """
@@ -166,15 +166,9 @@ def calculate_real_u(x, u, pv, l):
     if is_zero(e):
         pass
     elif e > 0:  # Suplus of energy
-        #if x > 0.75:
-         #   u = surplus_adjuster_grid(e, u)
-        #else:
-        u = surplus_adjuster_bat(e, u)
+        u = surplus_adjuster_grid(e, u)
     else:  # Need more energy
-        #if x < 0.25:
-        #    u = deficit_adjuster_grid(e, u)
-        #else:
-        u = deficit_adjuster_bat(e, u)
+        u = deficit_adjuster_grid(e, u)
     return e, u
 
 
