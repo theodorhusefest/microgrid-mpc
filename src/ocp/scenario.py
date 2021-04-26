@@ -238,14 +238,14 @@ class ScenarioOCP:
                     if scenario == subscenario:
                         continue
                     g_ant = [
-                        # self.s[scenario, "inputs", 0, "Pbc"]
-                        # - self.s[subscenario, "inputs", 0, "Pbc"],
-                        # self.s[scenario, "inputs", 0, "Pbd"]
-                        # - self.s[subscenario, "inputs", 0, "Pbd"],
-                        self.s[scenario, "inputs", 0, "Pgb"]
-                        - self.s[subscenario, "inputs", 0, "Pgb"],
-                        self.s[scenario, "inputs", 0, "Pgs"]
-                        - self.s[subscenario, "inputs", 0, "Pgs"],
+                        self.s[scenario, "inputs", 0, "Pbc"]
+                        - self.s[subscenario, "inputs", 0, "Pbc"],
+                        self.s[scenario, "inputs", 0, "Pbd"]
+                        - self.s[subscenario, "inputs", 0, "Pbd"],
+                        # self.s[scenario, "inputs", 0, "Pgb"]
+                        # - self.s[subscenario, "inputs", 0, "Pgb"],
+                        # self.s[scenario, "inputs", 0, "Pgs"]
+                        # - self.s[subscenario, "inputs", 0, "Pgs"],
                     ]
                     g += g_ant
                     lbg += [0] * len(g_ant)
@@ -276,14 +276,14 @@ class ScenarioOCP:
         )
         s_opt = sol["x"].full().flatten()
         s_opt = self.s(s_opt)
-        i = self.N_scenarios - 1
 
-        """
-        self.SOC = np.append(self.SOC, s_opt["scenario" + str(0), "states", 1, "SOC"])
-        self.Pbc = np.append(self.Pbc, s_opt["scenario" + str(0), "inputs", 0, "Pbc"])
-        self.Pbd = np.append(self.Pbd, s_opt["scenario" + str(0), "inputs", 0, "Pbd"])
-        self.Pgb = np.append(self.Pgb, s_opt["scenario" + str(0), "inputs", 0, "Pgb"])
-        self.Pgs = np.append(self.Pgs, s_opt["scenario" + str(0), "inputs", 0, "Pgs"])
+        i = 0
+        self.SOC = np.append(self.SOC, s_opt["scenario" + str(i), "states", 1, "SOC"])
+        self.Pbc = np.append(self.Pbc, s_opt["scenario" + str(i), "inputs", 0, "Pbc"])
+        self.Pbd = np.append(self.Pbd, s_opt["scenario" + str(i), "inputs", 0, "Pbd"])
+        self.Pgb = np.append(self.Pgb, s_opt["scenario" + str(i), "inputs", 0, "Pgb"])
+        self.Pgs = np.append(self.Pgs, s_opt["scenario" + str(i), "inputs", 0, "Pgs"])
+
         """
         u1 = []
         u2 = []
@@ -302,5 +302,6 @@ class ScenarioOCP:
         self.Pbd = np.append(self.Pbd, np.mean(u2))
         self.Pgb = np.append(self.Pgb, np.mean(u3))
         self.Pgs = np.append(self.Pgs, np.mean(u4))
+        """
 
         return self.get_SOC_opt(), self.get_u_opt()

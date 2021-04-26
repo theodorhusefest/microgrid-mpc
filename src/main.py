@@ -1,4 +1,5 @@
 import time
+from ast import literal_eval
 import argparse
 import numpy as np
 import pandas as pd
@@ -60,10 +61,12 @@ def scenario_mpc():
 
     # Get data
     observations = pd.read_csv(testfile, parse_dates=["date"]).fillna(0)
-    observations = observations[observations["date"] >= datetime(2021, 4, 2)]
+    observations = observations[observations["date"] >= datetime(2021, 4, 6)]
     solcast_forecasts = pd.read_csv(
         conf["solcast_file"], parse_dates=["time", "collected"]
     ).fillna(0)
+    load_scenario_file = pd.read_csv("./data/load_scenarios.csv")
+    pv_scenario_file = pd.read_csv("./data/pv_scenarios.csv")
 
     current_time = observations.date.iloc[0]
     print("Starting simulation at ", current_time)
@@ -78,6 +81,7 @@ def scenario_mpc():
     ]
 
     E = pd.read_csv(conf["price_file"], parse_dates=["time"])
+
     l = Load(N, testfile, "L", groundtruth=trainfile)
     B = Battery(T, N, **conf["battery"])
     PV = LinearPhotovoltaic(trainfile)
@@ -121,6 +125,7 @@ def scenario_mpc():
     fig1, ax1 = plt.subplots()
     fig2, ax2 = plt.subplots()
 
+    filter_ = [str(i) for i in range(N)]
     prob = [1, 1, 1]
     for step in range(simulation_horizon - N):
 
@@ -157,7 +162,7 @@ def scenario_mpc():
             pv_prediction = PV.predict(
                 ref.temp.values, ref.GHI.values, obs["PV"].iloc[0]
             )
-            l_prediction = l.get_previous_day(current_time, l_true)
+            l_prediction = l.get_previous_day(current_time, None)  # l_true)
             prediction_time += time.time() - pred_time
 
         if N_scenarios == 1:
@@ -168,12 +173,33 @@ def scenario_mpc():
             pv_upper = PV.predict(ref.temp.values, ref.GHI90.values, obs["PV"].iloc[0])
             pv_lower = PV.predict(ref.temp.values, ref.GHI10.values, obs["PV"].iloc[0])
 
-            l_sims = monte_carlo(N, N_sim, l_prediction, load_errors)
-            l_min = np.min(l_sims, axis=0)
-            l_max = np.max(l_sims, axis=0)
+            # l_sims = monte_carlo(N, N_sim, l_prediction, load_errors)
+            # l_min = np.min(l_sims, axis=0)
+            # l_max = np.max(l_sims, axis=0)
 
-            l_lower = l.interpolate_prediction(l_prediction + l_min, l_true)
-            l_upper = l.interpolate_prediction(l_prediction + l_max, l_true)
+            l_min, l_max, l_mean = [
+                utils.get_scenario_from_file(load_scenario_file, step, i, filter_)
+                for i in range(3)
+            ]
+
+            l_probs = np.asarray(
+                [
+                    utils.get_probability_from_file(
+                        load_scenario_file, step, i, filter_
+                    )
+                    for i in range(3)
+                ]
+            )
+
+            pv_probs = np.asarray(
+                [
+                    utils.get_probability_from_file(pv_scenario_file, step, i, filter_)
+                    for i in range(3)
+                ][::-1]
+            )
+
+            l_lower = l.interpolate_prediction(l_prediction - l_min, l_true)
+            l_upper = l.interpolate_prediction(l_prediction - l_max, l_true)
 
             if N_scenarios == 9:
                 pv_scenarios = [
@@ -214,9 +240,9 @@ def scenario_mpc():
 
                 pv_scenarios = [pv_upper, pv_prediction, pv_lower]
                 l_scenarios = [l_lower, l_prediction, l_upper]
-                prob = [0.2, 0.6, 0.2]
+                prob = np.multiply(pv_probs, l_probs)
 
-        if step % N == 0:
+        if step % 20 == 0:
             for i in range(len(pv_scenarios)):
                 ax1.plot(range(step, step + N), pv_scenarios[i], color="red")
                 ax2.plot(range(step, step + N), l_scenarios[i], color="red")
@@ -281,7 +307,9 @@ def scenario_mpc():
             e,
         )
 
-        utils.print_status(step, [B.get_SOC(openloop)], step_time, every=50)
+        utils.print_status(
+            step, [B.get_SOC(openloop)], step_time, every=int(simulation_horizon / 3)
+        )
         step_time = time.time()
 
     sys_metrics.calculate_consumption_rate(Pgs, pv_measured)

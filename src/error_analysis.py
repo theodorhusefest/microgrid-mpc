@@ -90,8 +90,8 @@ def load_analysis_2(N, L, data, plot=True):
         # plot_daily_errors(error_df.values, "PV")
         plot_error_hist(error_df.values, "Load")
         plt.show()
-    # error_df["date"] = data.date.iloc[144 : data.shape[0] - N].values
-    # error_df["rmse"] = rmse
+    error_df["date"] = data.date.iloc[144 : data.shape[0] - N].values
+    error_df["rmse"] = rmse
     return error_df
 
 
@@ -264,8 +264,8 @@ def estimate_errors(N, PV, train_file, test_file, forecast_file, stopdate=None):
 
     # load_errors = load_errors.loc[~(load_errors == 0).all(axis=1)]
 
-    # pv_errors.to_csv("./data/pv_errors.csv")
-    load_errors.to_csv("./data/load_errors.csv")
+    pv_errors.to_csv("./data/pv_errors_date.csv")
+    load_errors.to_csv("./data/load_errors_date.csv")
 
     # return pv_errors, load_errors
 
