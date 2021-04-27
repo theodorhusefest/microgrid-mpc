@@ -1,4 +1,4 @@
-simulation_horizon: 40  # hours
+simulation_horizon: 100  # hours
 prediction_horizon: 10 # hours
 robust_horizon: 1 # steps
 branch_factor: 3

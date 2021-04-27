@@ -244,6 +244,8 @@ def scenario_mpc():
                 pv_scenarios = [pv_upper, pv_prediction, pv_lower]
                 l_scenarios = [l_lower, l_prediction, l_upper]
                 prob = np.multiply(pv_probs, l_probs)
+                prob /=  np.sum(prob) # Scale to one
+
 
         if step % 20 == 0:
             for i in range(len(pv_scenarios)):
@@ -293,7 +295,6 @@ def scenario_mpc():
         e, uk = utils.primary_controller(
             xk_opt, Uk_opt, obs["PV"].values[0], obs["L"].values[0]
         )
-
 
         errors.append(e)
 
