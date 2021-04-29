@@ -58,17 +58,19 @@ def load_analysis_2(N, L, data, plot=True):
     error_df = pd.DataFrame()
 
     rmse = []
+    days = 7
+    time_skipped = 144 * days
 
-    for i in range(144, data.shape[0] - N):
+    for i in range(time_skipped, data.shape[0] - N):
         current_time = data.date[i]
         L_true = data[
             (data["date"] > current_time)
             & (data["date"] <= (current_time + timedelta(minutes=10 * N)))
         ][L.column].values
 
-        L_pred = L.get_previous_day(current_time, data.L.iloc[i])
+        L_pred = L.get_previous_day(current_time, measurement=data.L.iloc[i], days=days)
 
-        error_df[i - 144] = L_true - L_pred
+        error_df[i - time_skipped] = L_true - L_pred
         rmse.append(np.sqrt(mean_squared_error(L_true, L_pred)))
 
     error_df = error_df.transpose()
@@ -90,7 +92,7 @@ def load_analysis_2(N, L, data, plot=True):
         # plot_daily_errors(error_df.values, "PV")
         plot_error_hist(error_df.values, "Load")
         plt.show()
-    error_df["date"] = data.date.iloc[144 : data.shape[0] - N].values
+    error_df["date"] = data.date.iloc[time_skipped : data.shape[0] - N].values
     error_df["rmse"] = rmse
     return error_df
 
@@ -245,7 +247,7 @@ def estimate_errors(N, PV, train_file, test_file, forecast_file, stopdate=None):
         stopdate = datetime(2100, 12, 30)
     L = Load(N, train_file, "L")
     test_data = pd.read_csv(train_file, parse_dates=["date"])
-    load_errors = load_analysis_2(N, L, test_data, plot=False)
+    load_errors = load_analysis_2(N, L, test_data, plot=True)
 
     observations = pd.read_csv(train_file, parse_dates=["date"]).fillna(0)
     solcast_forecasts = pd.read_csv(
@@ -261,11 +263,10 @@ def estimate_errors(N, PV, train_file, test_file, forecast_file, stopdate=None):
     )
 
     pv_errors = pv_errors.loc[~(pv_errors == 0).all(axis=1)]
-
     # load_errors = load_errors.loc[~(load_errors == 0).all(axis=1)]
 
-    pv_errors.to_csv("./data/pv_errors_date.csv")
-    load_errors.to_csv("./data/load_errors_date.csv")
+    # pv_errors.to_csv("./data/pv_errors_date.csv")
+    # load_errors.to_csv("./data/load_errors_date.csv")
 
     # return pv_errors, load_errors
 
@@ -273,6 +274,7 @@ def estimate_errors(N, PV, train_file, test_file, forecast_file, stopdate=None):
 if __name__ == "__main__":
     train_file = "./data/23.4_train.csv"
     test_file = "./data/23.4_test.csv"
+    test_data_load = "./data/23.4_test.csv"
     estimate_errors(
         60,
         LinearPhotovoltaic(train_file),

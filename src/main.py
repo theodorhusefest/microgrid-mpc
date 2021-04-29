@@ -170,7 +170,9 @@ def scenario_mpc():
             pv_prediction = PV.predict(
                 ref.temp.values, ref.GHI.values, obs["PV"].iloc[0]
             )
-            l_prediction = l.get_previous_day(current_time, None)  # l_true)
+            l_prediction = l.get_previous_day(
+                current_time, measurement=None, days=1
+            )  # l_true)
             prediction_time += time.time() - pred_time
 
         if N_scenarios == 1:
@@ -209,48 +211,19 @@ def scenario_mpc():
             l_lower = l.interpolate_prediction(l_prediction - l_min, l_true)
             l_upper = l.interpolate_prediction(l_prediction - l_max, l_true)
 
+            pv_scenarios = np.asarray([pv_upper, pv_prediction, pv_lower])
+            l_scenarios = np.asarray([l_lower, l_prediction, l_upper])
+
+            prob = np.multiply(pv_probs, l_probs)
+            prob /= np.sum(prob)  # Scale to one
+
             if N_scenarios == 9:
-                pv_scenarios = [
-                    pv_upper,
-                    pv_upper,
-                    pv_upper,
-                    pv_prediction,
-                    pv_prediction,
-                    pv_prediction,
-                    pv_lower,
-                    pv_lower,
-                    pv_lower,
-                ]
-                l_scenarios = [
-                    l_lower,
-                    l_prediction,
-                    l_upper,
-                    l_lower,
-                    l_prediction,
-                    l_upper,
-                    l_lower,
-                    l_prediction,
-                    l_upper,
-                ]
-                prob = [
-                    0.2 * 0.2,
-                    0.2 * 0.6,
-                    0.2 * 0.2,
-                    0.6 * 0.2,
-                    0.6 * 0.6,
-                    0.2 * 0.2,
-                    0.2 * 0.2,
-                    0.6 * 0.2,
-                    0.2 * 0.2,
-                ]
 
-            elif N_scenarios == 3:
+                pv_scenarios = np.repeat(pv_scenarios, 3, axis=0)
+                l_scenarios = np.tile(l_scenarios, (3, 1))
 
-                pv_scenarios = [pv_upper, pv_prediction, pv_lower]
-                l_scenarios = [l_lower, l_prediction, l_upper]
-                prob = np.multiply(pv_probs, l_probs)
-                prob /=  np.sum(prob) # Scale to one
-
+                prob = np.multiply(np.repeat(pv_probs, 3), np.tile(l_probs, 3))
+                prob /= np.sum(prob)
 
         if step % 20 == 0:
             for i in range(len(pv_scenarios)):
@@ -309,37 +282,53 @@ def scenario_mpc():
         Pgb.append(uk[2])
         Pgs.append(uk[3])
 
-        temp_sale_diff = uk[3]-Uk_temp[3]
+        temp_sale_diff = uk[3] - Uk_temp[3]
         temp_buy_diff = uk[2] - Uk_temp[2]
 
         if temp_buy_diff >= 0:
-            Primary_Pgb += np.abs(((uk[2] - Uk_temp[2]) * E[E.time == current_time].price.values[0] / actions_per_hour))
+            Primary_Pgb += np.abs(
+                (
+                    (uk[2] - Uk_temp[2])
+                    * E[E.time == current_time].price.values[0]
+                    / actions_per_hour
+                )
+            )
         else:
-            Primary_Pgb_undelivered += np.abs(((uk[2] - Uk_temp[2]) * E[E.time == current_time].price.values[0] / actions_per_hour))
+            Primary_Pgb_undelivered += np.abs(
+                (
+                    (uk[2] - Uk_temp[2])
+                    * E[E.time == current_time].price.values[0]
+                    / actions_per_hour
+                )
+            )
 
         if temp_sale_diff >= 0:
-            Primary_Pgs += np.abs(((uk[3]-Uk_temp[3]) * E[E.time == current_time].price.values[0] / actions_per_hour))
+            Primary_Pgs += np.abs(
+                (
+                    (uk[3] - Uk_temp[3])
+                    * E[E.time == current_time].price.values[0]
+                    / actions_per_hour
+                )
+            )
         else:
-            Primary_Pgs_undelivered += np.abs(((uk[3] - Uk_temp[3]) * E[E.time == current_time].price.values[0] / actions_per_hour))
-
-
-
-
+            Primary_Pgs_undelivered += np.abs(
+                (
+                    (uk[3] - Uk_temp[3])
+                    * E[E.time == current_time].price.values[0]
+                    / actions_per_hour
+                )
+            )
 
         B.simulate_SOC(xk_opt, [uk[0], uk[1]])
 
-        if (
-                B.get_SOC(openloop) < 0.18  # conf["system"]["x_min"]
-                or B.get_SOC(openloop) > 0.82  # conf["system"]["x_max"]
-        ):
+        if B.get_SOC(openloop) < 0.18 or B.get_SOC(openloop) > 0.82:
             c_violations += 1
 
         sys_metrics.update_metrics(
             [Pbc[-1], Pbd[-1], Uk_temp[2], Uk_temp[3]],
             E[E.time == current_time].price.values[0] / actions_per_hour,
             e,
-            )
-
+        )
 
         utils.print_status(
             step, [B.get_SOC(openloop)], step_time, every=int(simulation_horizon / 3)

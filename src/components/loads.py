@@ -65,11 +65,11 @@ class Load:
 
         return self.true[step : step + self.N + 1][1:]
 
-    def get_previous_day(self, current_time, measurement=None):
+    def get_previous_day(self, current_time, days=1, measurement=None):
         """
         Returns the same values the day before
         """
-        pred_start = current_time - timedelta(days=1)
+        pred_start = current_time - timedelta(days=days)
 
         pred = self.df[
             (self.df["date"] > pred_start)

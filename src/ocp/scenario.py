@@ -24,8 +24,7 @@ class ScenarioOCP:
         self.Pb_max = conf_system["Pb_max"]
         self.Pg_max = conf_system["Pg_max"]
         self.battery_cost = conf_system["battery_cost"]
-        self.grid_cost = conf_system["grid_cost"]
-        self.ref_cost = conf_system["ref_cost"]
+        self.peak_cost = conf_system["peak_cost"]
         self.verbose = conf_system["verbose"]
 
         self.states = struct_symSX([entry("SOC"), entry("Pgb_p")])
@@ -140,15 +139,8 @@ class ScenarioOCP:
             self.s[scenario, "inputs", k, "Pgb"]
             - 0.9 * self.s[scenario, "inputs", k, "Pgs"]
         )
-        J_scen += (
-            self.grid_cost
-            * (
-                self.s[scenario, "inputs", k, "Pgb"]
-                + self.s[scenario, "inputs", k, "Pgs"]
-            )
-            ** 2
-        )
-        J_scen += 70 * (
+
+        J_scen += self.peak_cost * (
             self.s[scenario, "states", k + 1, "Pgb_p"]
             - self.s[scenario, "states", k, "Pgb_p"]
         )
@@ -187,12 +179,6 @@ class ScenarioOCP:
                 Xk_end = Fk["xf"]
 
                 J_scen += self.add_stage_cost(scenario, k)
-                # ineq_con = vertcat(
-                #    self.s[scenario, "inputs", k, "Pgb"],
-                #    self.s[scenario, "states", k, "Pgb_p"],
-                # )
-
-                # lbs[scenario, "states", k + 1, "Pgb_p"] = ineq_con
 
                 eq_con = [
                     Xk_end - self.s[scenario, "states", k + 1, "SOC"],
@@ -230,14 +216,14 @@ class ScenarioOCP:
                     for j in range(i + 1, len(current.scenarios)):
                         subscenario = current.scenarios[j]
                         g_ant = [
-                            # self.s[scenario, "inputs", k, "Pbc"]
-                            # - self.s[subscenario, "inputs", k, "Pbc"],
-                            # self.s[scenario, "inputs", k, "Pbd"]
-                            # - self.s[subscenario, "inputs", k, "Pbd"],
-                            self.s[scenario, "inputs", k, "Pgb"]
-                            - self.s[subscenario, "inputs", k, "Pgb"],
-                            self.s[scenario, "inputs", k, "Pgs"]
-                            - self.s[subscenario, "inputs", k, "Pgs"],
+                            self.s[scenario, "inputs", k, "Pbc"]
+                            - self.s[subscenario, "inputs", k, "Pbc"],
+                            self.s[scenario, "inputs", k, "Pbd"]
+                            - self.s[subscenario, "inputs", k, "Pbd"],
+                            # self.s[scenario, "inputs", k, "Pgb"]
+                            # - self.s[subscenario, "inputs", k, "Pgb"],
+                            # self.s[scenario, "inputs", k, "Pgs"]
+                            # - self.s[subscenario, "inputs", k, "Pgs"],
                         ]
                         g += g_ant
                         lbg += [0] * len(g_ant)
@@ -292,8 +278,8 @@ class ScenarioOCP:
         j_opt = sol["g"].full().flatten()
         s_opt = self.s(s_opt)
         # print(j_opt)
-
-        i = 0
+        """
+        i = self.N_scenarios - 1
         self.SOC = np.append(self.SOC, s_opt["scenario" + str(i), "states", 1, "SOC"])
         self.Pbc = np.append(self.Pbc, s_opt["scenario" + str(i), "inputs", 0, "Pbc"])
         self.Pbd = np.append(self.Pbd, s_opt["scenario" + str(i), "inputs", 0, "Pbd"])
@@ -323,6 +309,5 @@ class ScenarioOCP:
         self.Pbd = np.append(self.Pbd, np.mean(u2))
         self.Pgb = np.append(self.Pgb, np.mean(u3))
         self.Pgs = np.append(self.Pgs, np.mean(u4))
-        """
 
         return self.get_SOC_opt(), self.get_u_opt()
