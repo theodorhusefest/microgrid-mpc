@@ -94,6 +94,11 @@ def scenario_mpc():
     Pgb_p_all = []
     Pgb_p = 1
 
+    Primary_Pgb = 0
+    Primary_Pgb_undelivered = 0
+    Primary_Pgs = 0
+    Primary_Pgs_undelivered = 0
+
     pv_measured = []
     l_measured = []
     errors = []
@@ -291,6 +296,7 @@ def scenario_mpc():
         pv_measured.append(pv_true)
         l_measured.append(l_true)
         E_measured.append(E_prediction[0])
+        Uk_temp = np.copy(Uk_opt)
 
         e, uk = utils.primary_controller(
             xk_opt, Uk_opt, obs["PV"].values[0], obs["L"].values[0]
@@ -303,21 +309,37 @@ def scenario_mpc():
         Pgb.append(uk[2])
         Pgs.append(uk[3])
 
+        temp_sale_diff = uk[3]-Uk_temp[3]
+        temp_buy_diff = uk[2] - Uk_temp[2]
+
+        if temp_buy_diff >= 0:
+            Primary_Pgb += np.abs(((uk[2] - Uk_temp[2]) * E[E.time == current_time].price.values[0] / actions_per_hour))
+        else:
+            Primary_Pgb_undelivered += np.abs(((uk[2] - Uk_temp[2]) * E[E.time == current_time].price.values[0] / actions_per_hour))
+
+        if temp_sale_diff >= 0:
+            Primary_Pgs += np.abs(((uk[3]-Uk_temp[3]) * E[E.time == current_time].price.values[0] / actions_per_hour))
+        else:
+            Primary_Pgs_undelivered += np.abs(((uk[3] - Uk_temp[3]) * E[E.time == current_time].price.values[0] / actions_per_hour))
+
+
+
+
+
         B.simulate_SOC(xk_opt, [uk[0], uk[1]])
-        Pgb_p = np.max([Pgb_p, uk[2]])
-        Pgb_p_all.append(Pgb_p)
 
         if (
-            B.get_SOC(openloop) < 0.18  # conf["system"]["x_min"]
-            or B.get_SOC(openloop) > 0.82  # conf["system"]["x_max"]
+                B.get_SOC(openloop) < 0.18  # conf["system"]["x_min"]
+                or B.get_SOC(openloop) > 0.82  # conf["system"]["x_max"]
         ):
             c_violations += 1
 
         sys_metrics.update_metrics(
-            [Pbc[-1], Pbd[-1], Pgb[-1], Pgs[-1]],
+            [Pbc[-1], Pbd[-1], Uk_temp[2], Uk_temp[3]],
             E[E.time == current_time].price.values[0] / actions_per_hour,
             e,
-        )
+            )
+
 
         utils.print_status(
             step, [B.get_SOC(openloop)], step_time, every=int(simulation_horizon / 3)
@@ -386,6 +408,10 @@ def scenario_mpc():
     )
 
     stop = time.time()
+    print("Primary controller extra bought for {}".format(Primary_Pgb))
+    print("Primary controller undelivered buy for {}".format(Primary_Pgb_undelivered))
+    print("Primary controller extra sold for {}".format(Primary_Pgs))
+    print("Primary controller undelivered sale for {}".format(Primary_Pgs_undelivered))
     print("\nFinished optimation in {}s".format(np.around(stop - start_time, 2)))
     print("Prediction time was {}".format(np.around(prediction_time, 2)))
     print("Simulation time was {}".format(np.around(simulation_time, 2)))
