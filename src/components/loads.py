@@ -58,7 +58,6 @@ class Load:
         return measurement * np.ones(self.N)
 
     def perfect_pred(self, step):
-
         """
         Returns the groundtruth for k+1 to N
         """
@@ -85,16 +84,15 @@ class Load:
         """
         Returns a linear combination of prediction and measurement
         """
-        weight = np.linspace(0, 1, len(pred) + 1)
+
+        pred_weight = np.append(np.linspace(0, 1, 12 + 1), np.ones(len(pred) - 12))
+        measurement_weight = np.append(
+            np.linspace(1, 0, 12 + 1), np.zeros(len(pred) - 12)
+        )
         pred = np.append(np.asarray([measurement]), pred)
-        pred = (weight[::-1] * np.ones_like(pred) * measurement + weight * pred)[1:]
+
+        pred = (measurement_weight * measurement + pred_weight * pred)[1:]
         return pred
-
-    def get_measurement(self, step):
-        if self.groundtruth is None:
-            raise ValueError("Groundtruth not provided")
-
-        return self.true[step]
 
 
 if __name__ == "__main__":

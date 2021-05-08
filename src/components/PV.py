@@ -17,7 +17,7 @@ class Photovoltaic:
         Pm=800,
         Im=8.36,
         Vm=37.38,
-        Voc=100,
+        Voc=90,
         Isc=9.06,
         Ns=72,
         A=1.3,
@@ -173,14 +173,34 @@ class LinearPhotovoltaic:
             )
         )
 
+    def get_mean_day(self, column):
+        """
+        Extracts the days and returns the average day
+        """
+
+        num_datapoints = 24 * 60 / 10
+        days = []
+        grouped = self.train.groupby([self.train.index.floor("d")], as_index=False)
+        for _, group in grouped:
+            if len(group) != num_datapoints:
+                continue
+            days.append(group[column].values)
+
+        return np.asarray(days).mean(axis=0)
+
     def predict(self, temp, GHI, measurement=None):
         pred = self.model.predict(np.c_[temp, GHI]).flatten()
         pred = np.clip(pred, 0, np.inf)
-        if np.min(pred) > 1 and measurement:
+        if np.max(pred) > 1 and measurement:
+            time_steps = 16
+            pred_weight = np.append(
+                np.linspace(0, 1, time_steps), np.ones(len(pred) - time_steps)
+            )
+            measurement_weight = np.append(
+                np.linspace(1, 0, time_steps), np.zeros(len(pred) - time_steps)
+            )
+            pred = measurement_weight * measurement + pred_weight * pred
 
-            weight = np.append(np.linspace(0, 1, 12 + 1), np.ones(len(pred) - 12))
-            pred = np.append(np.asarray([measurement]), pred)
-            pred = (weight[::-1] * np.ones_like(pred) * measurement + weight * pred)[1:]
         return pred
 
 

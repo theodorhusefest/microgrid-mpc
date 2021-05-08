@@ -25,6 +25,7 @@ class ScenarioOCP:
         self.Pg_max = conf_system["Pg_max"]
         self.battery_cost = conf_system["battery_cost"]
         self.peak_cost = conf_system["peak_cost"]
+        self.terminal_cost = conf_system["terminal_cost"]
         self.verbose = conf_system["verbose"]
 
         self.states = struct_symSX([entry("SOC"), entry("Pgb_p")])
@@ -145,6 +146,31 @@ class ScenarioOCP:
             - self.s[scenario, "states", k, "Pgb_p"]
         )
 
+        if k != self.N - 1:
+            J_scen += (
+                0.0001
+                * (
+                    100
+                    * (
+                        self.s[scenario, "states", k, "SOC"]
+                        - self.s[scenario, "states", k + 1, "SOC"]
+                    )
+                )
+                ** 2
+            )
+
+        return J_scen
+
+    def add_stage_cost_tracking(self, scenario, k):
+        J_scen = 10 * ((0.5 - self.s[scenario, "states", k, "SOC"]) * 100) ** 2
+
+        J_scen += (
+            self.s[scenario, "inputs", k, "Pbc"] + self.s[scenario, "inputs", k, "Pbd"]
+        ) ** 2
+        J_scen += (
+            self.s[scenario, "inputs", k, "Pgb"] + self.s[scenario, "inputs", k, "Pgs"]
+        ) ** 2
+
         return J_scen
 
     def build_scenario_ocp(self, root=None):
@@ -201,7 +227,9 @@ class ScenarioOCP:
                 ubg += [0] * len(eq_con) + [self.Pg_max] * 2
 
             # Add terminal cost
-            J_scen += 5000 * (0.5 - self.s[scenario, "states", self.N - 1, "SOC"]) ** 2
+            J_scen += (
+                self.terminal_cost * self.s[scenario, "states", self.N - 1, "SOC"] - 250
+            )
 
             J += self.s_data[scenario, "data", 0, "prob"] * J_scen
         # Non-anticipativity constraints
@@ -264,7 +292,7 @@ class ScenarioOCP:
 
         return [s0, lbs, ubs, lbg, ubg]
 
-    def solve_nlp(self, params, data):
+    def solve_nlp(self, params, data, argmax):
         # Solve the NLP
         sol = self.solver(
             x0=params[0],
@@ -278,7 +306,7 @@ class ScenarioOCP:
         j_opt = sol["g"].full().flatten()
         s_opt = self.s(s_opt)
         # print(j_opt)
-        """
+
         i = self.N_scenarios - 1
         self.SOC = np.append(self.SOC, s_opt["scenario" + str(i), "states", 1, "SOC"])
         self.Pbc = np.append(self.Pbc, s_opt["scenario" + str(i), "inputs", 0, "Pbc"])
@@ -309,5 +337,5 @@ class ScenarioOCP:
         self.Pbd = np.append(self.Pbd, np.mean(u2))
         self.Pgb = np.append(self.Pgb, np.mean(u3))
         self.Pgs = np.append(self.Pgs, np.mean(u4))
-
+        """
         return self.get_SOC_opt(), self.get_u_opt()

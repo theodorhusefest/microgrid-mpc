@@ -25,6 +25,17 @@ from utils.monte_carlo import (
 )
 
 
+def remove_outliers(df, N, pl=5, pu=95):
+    steps = [str(i) for i in range(N)]
+    print("Shape before", df.shape)
+    upper = np.percentile(df[str(N - 1)], pu)
+    lower = np.percentile(df[str(N - 1)], pl)
+    for step in steps:
+        df = df[(df[step] < upper) & (df[step] > lower)]
+    print("Shape after", df.shape)
+    return df
+
+
 def scenario_mpc():
     """
     Main function for mpc-scheme with receding horizion.
@@ -61,7 +72,7 @@ def scenario_mpc():
 
     # Get data
     observations = pd.read_csv(testfile, parse_dates=["date"]).fillna(0)
-    observations = observations[observations["date"] >= datetime(2021, 4, 7)]
+    observations = observations[observations["date"] >= datetime(2021, 4, 12)]
     solcast_forecasts = pd.read_csv(
         conf["solcast_file"], parse_dates=["time", "collected"]
     ).fillna(0)
@@ -112,9 +123,12 @@ def scenario_mpc():
 
     # Initilize Montecarlo
     N_sim = 100
-    # monte_carlo = njit()(monte_carlo_simulations)
-    load_errors = pd.read_csv("./data/load_errors.csv").drop(["Unnamed: 0"], axis=1)
-    load_errors = load_errors[~np.isnan(load_errors).any(axis=1)]
+    monte_carlo = njit()(monte_carlo_simulations)
+    load_errors = (
+        pd.read_csv("./data/load_errors.csv").drop(["Unnamed: 0"], axis=1).fillna(0)
+    )
+    load_errors = remove_outliers(load_errors, N)
+
     load_errors = shuffle_dataframe(load_errors).values
     l_min = np.min(load_errors, axis=0)
     l_max = np.max(load_errors, axis=0)
@@ -170,9 +184,7 @@ def scenario_mpc():
             pv_prediction = PV.predict(
                 ref.temp.values, ref.GHI.values, obs["PV"].iloc[0]
             )
-            l_prediction = l.get_previous_day(
-                current_time, measurement=None, days=1
-            )  # l_true)
+            l_prediction = l.get_previous_day(current_time, measurement=l_true, days=1)
             prediction_time += time.time() - pred_time
 
         if N_scenarios == 1:
@@ -182,16 +194,17 @@ def scenario_mpc():
         elif True:
             pv_upper = PV.predict(ref.temp.values, ref.GHI90.values, obs["PV"].iloc[0])
             pv_lower = PV.predict(ref.temp.values, ref.GHI10.values, obs["PV"].iloc[0])
+            l_sims = monte_carlo(N, N_sim, l_prediction, load_errors)
 
-            # l_sims = monte_carlo(N, N_sim, l_prediction, load_errors)
-            # l_min = np.min(l_sims, axis=0)
-            # l_max = np.max(l_sims, axis=0)
-
-            l_min, l_max, l_mean = [
+            red_time = time.time()
+            l_scenarios = scenario_reduction(l_sims, N, Nr, branch_factor)[::-1]
+            reduction_time += time.time() - red_time
+            """
+            l_min, l_max, _ = [
                 utils.get_scenario_from_file(load_scenario_file, step, i, filter_)
                 for i in range(3)
             ]
-
+            """
             l_probs = np.asarray(
                 [
                     utils.get_probability_from_file(
@@ -208,11 +221,11 @@ def scenario_mpc():
                 ][::-1]
             )
 
-            l_lower = l.interpolate_prediction(l_prediction - l_min, l_true)
-            l_upper = l.interpolate_prediction(l_prediction - l_max, l_true)
+            # l_lower = l.interpolate_prediction(l_prediction - l_min, l_true)
+            # l_upper = l.interpolate_prediction(l_prediction + l_max, l_true)
 
             pv_scenarios = np.asarray([pv_upper, pv_prediction, pv_lower])
-            l_scenarios = np.asarray([l_lower, l_prediction, l_upper])
+            # l_scenarios = np.asarray([l_lower, l_prediction, l_upper])
 
             prob = np.multiply(pv_probs, l_probs)
             prob /= np.sum(prob)  # Scale to one
@@ -255,7 +268,9 @@ def scenario_mpc():
                 s_data["scenario" + str(i), "data", k, "prob"] = prob[i]
 
         sol_time = time.time()
-        xk_opt, Uk_opt = ocp.solve_nlp([s0, lbs, ubs, lbg, ubg], s_data)
+        xk_opt, Uk_opt = ocp.solve_nlp(
+            [s0, lbs, ubs, lbg, ubg], s_data, np.argmax(prob)
+        )
         solver_time += time.time() - sol_time
 
         # Simulate the system after disturbances
@@ -274,6 +289,9 @@ def scenario_mpc():
         e, uk = utils.primary_controller(
             xk_opt, Uk_opt, obs["PV"].values[0], obs["L"].values[0]
         )
+
+        Pgb_p = np.max([Pgb_p, uk[2]])
+        Pgb_p_all.append(Pgb_p)
 
         errors.append(e)
 
@@ -375,6 +393,8 @@ def scenario_mpc():
 
     p.plot_data([np.asarray(errors)], title="Errors", logpath=logpath)
 
+    print(np.sum(pv_measured) / len(pv_measured))
+    print(np.sum(l_measured) / len(l_measured))
     p.plot_data(
         np.asarray([pv_measured, l_measured]),
         title="PV and Load",

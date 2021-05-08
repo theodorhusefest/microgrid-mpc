@@ -27,7 +27,7 @@ def create_logs_folder(rootdir="./logs/", foldername=""):
     if not os.path.exists(folderpath):
         os.makedirs(folderpath)
     # Save files in logs
-    files = ["/config.yml", "/nominel_mpc.py", "/scenario_mpc.py"]
+    files = ["/config.yml", "/main.py", "/scenario_mpc.py"]
     # for f in files:
     #    shutil.copyfile(f, folderpath + f)
     return folderpath
