@@ -37,7 +37,7 @@ def print_status(step, X, step_time, every=50):
     if step % every == 0:
         print("\nSTATUS - STEP {}".format(step))
         print("-" * 100)
-        print("Current step took {}s".format(np.around(time.time() - step_time, 2)))
+        print("Current step took {}s".format(np.around(step_time, 2)))
         for i, x in enumerate(X):
             print("x{}: {} %".format(i + 1, np.around(x, 2)))
         print("-" * 100)

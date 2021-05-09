@@ -1,10 +1,8 @@
 import time
-from ast import literal_eval
-import argparse
+import progressbar
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from numba import njit
 from datetime import datetime, timedelta
 
 import utils.plots as p
@@ -13,27 +11,9 @@ import utils.helpers as utils
 
 from components.loads import Load
 from ocp.scenario import ScenarioOCP
-from ocp.nominel import NominelMPC
 from components.PV import Photovoltaic, LinearPhotovoltaic
 from components.battery import Battery
-from components.spot_price import get_spot_price
-from utils.scenario_tree import build_scenario_tree, get_scenarios
-from utils.monte_carlo import (
-    monte_carlo_simulations,
-    scenario_reduction,
-    shuffle_dataframe,
-)
-
-
-def remove_outliers(df, N, pl=5, pu=95):
-    steps = [str(i) for i in range(N)]
-    print("Shape before", df.shape)
-    upper = np.percentile(df[str(N - 1)], pu)
-    lower = np.percentile(df[str(N - 1)], pl)
-    for step in steps:
-        df = df[(df[step] < upper) & (df[step] > lower)]
-    print("Shape after", df.shape)
-    return df
+from utils.scenario_tree import build_scenario_tree
 
 
 def scenario_mpc():
@@ -67,9 +47,6 @@ def scenario_mpc():
     branch_factor = conf["branch_factor"]
     N_scenarios = branch_factor ** Nr
 
-    start_time = time.time()
-    step_time = start_time
-
     # Get data
     observations = pd.read_csv(testfile, parse_dates=["date"]).fillna(0)
     observations = observations[observations["date"] >= datetime(2021, 4, 7)]
@@ -102,39 +79,24 @@ def scenario_mpc():
     Pgs = []
     Pgb = []
 
-    Pgb_p = 1
+    Pgb_p = 0
     Pgb_p_all = [Pgb_p]
 
-    Primary_Pgb = 0
-    Primary_Pgb_undelivered = 0
-    Primary_Pgs = 0
-    Primary_Pgs_undelivered = 0
+    primary_Pgb = 0
+    primary_Pgs = 0
 
     pv_measured = []
     l_measured = []
     errors = []
     E_measured = []
-    c_violations = 0
 
     prediction_time = 0
     simulation_time = 0
     reduction_time = 0
     solver_time = 0
 
-    # Initilize Montecarlo
-    N_sim = 100
-    monte_carlo = njit()(monte_carlo_simulations)
-    load_errors = (
-        pd.read_csv("./data/load_errors.csv").drop(["Unnamed: 0"], axis=1).fillna(0)
-    )
-    load_errors = remove_outliers(load_errors, N)
-
-    load_errors = shuffle_dataframe(load_errors).values
-    l_min = np.min(load_errors, axis=0)
-    l_max = np.max(load_errors, axis=0)
-
     # Build reference tree
-    tree, leaf_nodes = build_scenario_tree(
+    _, _ = build_scenario_tree(
         N, Nr, branch_factor, np.ones(N + 1), 0, np.ones(N + 1), 0
     )
 
@@ -149,7 +111,19 @@ def scenario_mpc():
 
     filter_ = [str(i) for i in range(N)]
     prob = [1, 1, 1]
+
+    bar = progressbar.ProgressBar(
+        maxval=simulation_horizon - N,
+        widgets=[
+            progressbar.Bar("=", "[", "]"),
+            " Finished with",
+            progressbar.Percentage(),
+        ],
+    )
+    bar.start()
     for step in range(simulation_horizon - N):
+
+        step_start = time.time()
 
         # Get measurements
         pv_true = obs["PV"].values[0]
@@ -193,18 +167,8 @@ def scenario_mpc():
             pv_scenarios = [pv_prediction]
             l_scenarios = [l_prediction]
 
-        elif True:
-            pv_upper = PV.predict(ref.temp.values, ref.GHI90.values)
-            pv_lower = PV.predict(ref.temp.values, ref.GHI10.values)
-
+        else:
             if False:
-                l_sims = monte_carlo(N, N_sim, l_prediction, load_errors)
-
-                red_time = time.time()
-                l_scenarios = scenario_reduction(l_sims, N, Nr, branch_factor)[::-1]
-                reduction_time += time.time() - red_time
-
-            elif True:
 
                 l_min, l_max, _ = [
                     utils.get_scenario_from_file(load_scenario_file, step, i, filter_)
@@ -213,11 +177,8 @@ def scenario_mpc():
                 l_lower = l_prediction - l_min
                 l_upper = l_prediction + l_max
 
-            elif False:
+            elif True:
                 l_lower, l_upper = l.get_minmax_day(current_time, step)
-
-                l_lower = l.interpolate_prediction(l_lower, l_true)
-                l_upper = l.interpolate_prediction(l_upper, l_true)
 
             l_probs = np.asarray(
                 [
@@ -234,6 +195,9 @@ def scenario_mpc():
                     for i in range(3)
                 ][::-1]
             )
+
+            pv_upper = PV.predict(ref.temp.values, ref.GHI90.values)
+            pv_lower = PV.predict(ref.temp.values, ref.GHI10.values)
 
             pv_scenarios = np.asarray([pv_upper, pv_prediction, pv_lower])
             l_scenarios = np.asarray([l_lower, l_prediction, l_upper])
@@ -261,7 +225,6 @@ def scenario_mpc():
 
         # Update parameters
         for i in range(N_scenarios):
-            "scenario" + str(i)
             s0["scenario" + str(i), "states", 0, "SOC"] = B.get_SOC(openloop)
             lbs["scenario" + str(i), "states", 0, "SOC"] = B.get_SOC(openloop)
             ubs["scenario" + str(i), "states", 0, "SOC"] = B.get_SOC(openloop)
@@ -278,6 +241,7 @@ def scenario_mpc():
                 )
                 s_data["scenario" + str(i), "data", k, "prob"] = prob[i]
 
+        # Solve OCP
         sol_time = time.time()
         xk_opt, Uk_opt = ocp.solve_nlp(
             [s0, lbs, ubs, lbg, ubg], s_data, np.argmax(prob)
@@ -315,60 +279,48 @@ def scenario_mpc():
         temp_buy_diff = uk[2] - Uk_temp[2]
 
         if temp_buy_diff >= 0:
-            Primary_Pgb += np.abs(
+            primary_Pgb = np.abs(
                 (
                     (uk[2] - Uk_temp[2])
                     * E[E.time == current_time].price.values[0]
                     / actions_per_hour
                 )
             )
-        else:
-            Primary_Pgb_undelivered += np.abs(
-                (
-                    (uk[2] - Uk_temp[2])
-                    * E[E.time == current_time].price.values[0]
-                    / actions_per_hour
-                )
-            )
+            primary_Pgs = 0
 
         if temp_sale_diff >= 0:
-            Primary_Pgs += np.abs(
+            primary_Pgs = np.abs(
                 (
                     (uk[3] - Uk_temp[3])
                     * E[E.time == current_time].price.values[0]
                     / actions_per_hour
                 )
             )
-        else:
-            Primary_Pgs_undelivered += np.abs(
-                (
-                    (uk[3] - Uk_temp[3])
-                    * E[E.time == current_time].price.values[0]
-                    / actions_per_hour
-                )
-            )
+            primary_Pgb = 0
 
         B.simulate_SOC(xk_opt, [uk[0], uk[1]])
 
-        if B.get_SOC(openloop) < 0.18 or B.get_SOC(openloop) > 0.82:
-            c_violations += 1
+        step_time = time.time() - step_start
 
         sys_metrics.update_metrics(
             [Pbc[-1], Pbd[-1], Uk_temp[2], Uk_temp[3]],
             E[E.time == current_time].price.values[0] / actions_per_hour,
             e,
             Pgb_p_all[-1],
+            primary_Pgb,
+            primary_Pgs,
+            step_time,
         )
 
-        utils.print_status(
-            step, [B.get_SOC(openloop)], step_time, every=int(simulation_horizon / 3)
-        )
-        step_time = time.time()
+        # utils.print_status(
+        #    step, [B.get_SOC(openloop)], step_time, every=int(simulation_horizon / 3)
+        # )
+
+        bar.update(step)
 
     sys_metrics.calculate_consumption_rate(Pgs, pv_measured)
     sys_metrics.calculate_dependency_rate(Pgb, l_measured)
-    sys_metrics.print_metrics(B.get_SOC(openloop))
-    print("Contraint violations", c_violations)
+    sys_metrics.print_metrics(B.x_sim, E_measured)
 
     ax1.set_title("PV")
     ax2.set_title("Load")
@@ -425,17 +377,6 @@ def scenario_mpc():
         legends=["Peak Power"],
         logpath=logpath,
     )
-
-    stop = time.time()
-    print("Primary controller extra bought for {}".format(Primary_Pgb))
-    print("Primary controller undelivered buy for {}".format(Primary_Pgb_undelivered))
-    print("Primary controller extra sold for {}".format(Primary_Pgs))
-    print("Primary controller undelivered sale for {}".format(Primary_Pgs_undelivered))
-    print("\nFinished optimation in {}s".format(np.around(stop - start_time, 2)))
-    print("Prediction time was {}".format(np.around(prediction_time, 2)))
-    print("Simulation time was {}".format(np.around(simulation_time, 2)))
-    print("Reduction time was {}".format(np.around(reduction_time, 2)))
-    print("Solver time was {}".format(np.around(solver_time, 2)))
 
     if logpath:
         fig1.savefig("{}-{}".format(logpath, "pv_scenarios" + ".eps"), format="eps")

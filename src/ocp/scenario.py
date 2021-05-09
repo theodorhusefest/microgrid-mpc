@@ -233,52 +233,24 @@ class ScenarioOCP:
             )
 
             J += self.s_data[scenario, "data", 0, "prob"] * J_scen
-        # Non-anticipativity constraints
-        if root:
-            to_explore = [root]
-            while to_explore:
-                current = to_explore.pop(0)
-                to_explore += current.children
-                k = current.level
-                for i in range(len(current.scenarios)):
-                    scenario = current.scenarios[i]
-                    for j in range(i + 1, len(current.scenarios)):
-                        subscenario = current.scenarios[j]
-                        g_ant = [
-                            self.s[scenario, "inputs", k, "Pbc"]
-                            - self.s[subscenario, "inputs", k, "Pbc"],
-                            self.s[scenario, "inputs", k, "Pbd"]
-                            - self.s[subscenario, "inputs", k, "Pbd"],
-                            # self.s[scenario, "inputs", k, "Pgb"]
-                            # - self.s[subscenario, "inputs", k, "Pgb"],
-                            # self.s[scenario, "inputs", k, "Pgs"]
-                            # - self.s[subscenario, "inputs", k, "Pgs"],
-                        ]
-                        g += g_ant
-                        lbg += [0] * len(g_ant)
-                        ubg += [0] * len(g_ant)
-        else:
-            # Non-anticipativity constraints
-            for j in range(self.N_scenarios):
-                scenario = "scenario" + str(j)
-                for i in range(j + 1, self.N_scenarios):
-                    subscenario = "scenario" + str(i)
 
-                    if scenario == subscenario:
-                        continue
-                    g_ant = [
-                        self.s[scenario, "inputs", 0, "Pbc"]
-                        - self.s[subscenario, "inputs", 0, "Pbc"],
-                        self.s[scenario, "inputs", 0, "Pbd"]
-                        - self.s[subscenario, "inputs", 0, "Pbd"],
-                        # self.s[scenario, "inputs", 0, "Pgb"]
-                        # - self.s[subscenario, "inputs", 0, "Pgb"],
-                        # self.s[scenario, "inputs", 0, "Pgs"]
-                        # - self.s[subscenario, "inputs", 0, "Pgs"],
-                    ]
-                    g += g_ant
-                    lbg += [0] * len(g_ant)
-                    ubg += [0] * len(g_ant)
+        # Non-anticipativity constraints
+        for j in range(self.N_scenarios):
+            scenario = "scenario" + str(j)
+            for i in range(j + 1, self.N_scenarios):
+                subscenario = "scenario" + str(i)
+
+                if scenario == subscenario:
+                    continue
+                g_ant = [
+                    self.s[scenario, "inputs", 0, "Pbc"]
+                    - self.s[subscenario, "inputs", 0, "Pbc"],
+                    self.s[scenario, "inputs", 0, "Pbd"]
+                    - self.s[subscenario, "inputs", 0, "Pbd"],
+                ]
+                g += g_ant
+                lbg += [0] * len(g_ant)
+                ubg += [0] * len(g_ant)
 
         prob = {"f": J, "x": self.s, "g": vertcat(*g), "p": self.s_data}
         if self.verbose:
@@ -286,7 +258,7 @@ class ScenarioOCP:
         else:
             opts = {
                 "verbose_init": False,
-                "ipopt": {"print_level": 2},
+                "ipopt": {"print_level": 2, "sb": "yes"},
                 "print_time": False,
             }
             self.solver = nlpsol("solver", "ipopt", prob, opts)
@@ -304,9 +276,7 @@ class ScenarioOCP:
             p=data,
         )
         s_opt = sol["x"].full().flatten()
-        j_opt = sol["g"].full().flatten()
         s_opt = self.s(s_opt)
-        # print(j_opt)
 
         i = int(np.floor(self.N_scenarios / 2))
         self.SOC = np.append(self.SOC, s_opt["scenario" + str(i), "states", 1, "SOC"])
@@ -315,31 +285,4 @@ class ScenarioOCP:
         self.Pgb = np.append(self.Pgb, s_opt["scenario" + str(i), "inputs", 0, "Pgb"])
         self.Pgs = np.append(self.Pgs, s_opt["scenario" + str(i), "inputs", 0, "Pgs"])
 
-        # print(s_opt["scenario" + str(i), "states", 1, "Pgb_p"])
-        # print(s_opt["scenario" + str(i), "states", 0, "Pgb_p"])
-        # print(s_opt["scenario" + str(i), "inputs", :, "Pgb"])
-        #        print(ass)
-        # print(s_opt["scenario" + str(i), "states", 1, "SOC"])
-        """
-        u1 = []
-        u2 = []
-        u3 = []
-        u4 = []
-        soc = []
-        for i in range(self.N_scenarios):
-            u1.append(s_opt["scenario" + str(i), "inputs", 0, "Pbc"])
-            u2.append(s_opt["scenario" + str(i), "inputs", 0, "Pbd"])
-            u3.append(s_opt["scenario" + str(i), "inputs", 0, "Pgb"])
-            u4.append(s_opt["scenario" + str(i), "inputs", 0, "Pgs"])
-            soc.append(s_opt["scenario" + str(0), "states", 1, "SOC"])
-
-        print(u3, u4)
-        # print()
-
-        self.SOC = np.append(self.SOC, np.mean(soc))
-        self.Pbc = np.append(self.Pbc, np.mean(u1))
-        self.Pbd = np.append(self.Pbd, np.mean(u2))
-        self.Pgb = np.append(self.Pgb, np.mean(u3))
-        self.Pgs = np.append(self.Pgs, np.mean(u4))
-        """
         return self.get_SOC_opt(), self.get_u_opt()

@@ -1,8 +1,9 @@
-simulation_horizon: 150  # hours
+simulation_horizon: 58  # hours
 prediction_horizon: 10 # hours
 robust_horizon: 1 # steps
-branch_factor: 3
+branch_factor: 9
 perfect_predictions: False
+print_details: False
 
 actions_per_hour: 6
 logpath: "./logs/"
