@@ -72,7 +72,7 @@ def scenario_mpc():
 
     # Get data
     observations = pd.read_csv(testfile, parse_dates=["date"]).fillna(0)
-    observations = observations[observations["date"] >= datetime(2021, 4, 12)]
+    observations = observations[observations["date"] >= datetime(2021, 4, 7)]
     solcast_forecasts = pd.read_csv(
         conf["solcast_file"], parse_dates=["time", "collected"]
     ).fillna(0)
@@ -102,8 +102,8 @@ def scenario_mpc():
     Pgs = []
     Pgb = []
 
-    Pgb_p_all = []
     Pgb_p = 1
+    Pgb_p_all = [Pgb_p]
 
     Primary_Pgb = 0
     Primary_Pgb_undelivered = 0
@@ -184,7 +184,9 @@ def scenario_mpc():
             pv_prediction = PV.predict(
                 ref.temp.values, ref.GHI.values, obs["PV"].iloc[0]
             )
-            l_prediction = l.get_previous_day(current_time, measurement=l_true, days=1)
+            l_prediction = l.get_previous_day(
+                current_time, measurement=l_true, days=7, rounds=2
+            )
             prediction_time += time.time() - pred_time
 
         if N_scenarios == 1:
@@ -192,19 +194,31 @@ def scenario_mpc():
             l_scenarios = [l_prediction]
 
         elif True:
-            pv_upper = PV.predict(ref.temp.values, ref.GHI90.values, obs["PV"].iloc[0])
-            pv_lower = PV.predict(ref.temp.values, ref.GHI10.values, obs["PV"].iloc[0])
-            l_sims = monte_carlo(N, N_sim, l_prediction, load_errors)
+            pv_upper = PV.predict(ref.temp.values, ref.GHI90.values)
+            pv_lower = PV.predict(ref.temp.values, ref.GHI10.values)
 
-            red_time = time.time()
-            l_scenarios = scenario_reduction(l_sims, N, Nr, branch_factor)[::-1]
-            reduction_time += time.time() - red_time
-            """
-            l_min, l_max, _ = [
-                utils.get_scenario_from_file(load_scenario_file, step, i, filter_)
-                for i in range(3)
-            ]
-            """
+            if False:
+                l_sims = monte_carlo(N, N_sim, l_prediction, load_errors)
+
+                red_time = time.time()
+                l_scenarios = scenario_reduction(l_sims, N, Nr, branch_factor)[::-1]
+                reduction_time += time.time() - red_time
+
+            elif True:
+
+                l_min, l_max, _ = [
+                    utils.get_scenario_from_file(load_scenario_file, step, i, filter_)
+                    for i in range(3)
+                ]
+                l_lower = l_prediction - l_min
+                l_upper = l_prediction + l_max
+
+            elif False:
+                l_lower, l_upper = l.get_minmax_day(current_time, step)
+
+                l_lower = l.interpolate_prediction(l_lower, l_true)
+                l_upper = l.interpolate_prediction(l_upper, l_true)
+
             l_probs = np.asarray(
                 [
                     utils.get_probability_from_file(
@@ -221,11 +235,8 @@ def scenario_mpc():
                 ][::-1]
             )
 
-            # l_lower = l.interpolate_prediction(l_prediction - l_min, l_true)
-            # l_upper = l.interpolate_prediction(l_prediction + l_max, l_true)
-
             pv_scenarios = np.asarray([pv_upper, pv_prediction, pv_lower])
-            # l_scenarios = np.asarray([l_lower, l_prediction, l_upper])
+            l_scenarios = np.asarray([l_lower, l_prediction, l_upper])
 
             prob = np.multiply(pv_probs, l_probs)
             prob /= np.sum(prob)  # Scale to one
@@ -290,7 +301,7 @@ def scenario_mpc():
             xk_opt, Uk_opt, obs["PV"].values[0], obs["L"].values[0]
         )
 
-        Pgb_p = np.max([Pgb_p, uk[2]])
+        Pgb_p = np.max([Pgb_p_all[-1], uk[2]])
         Pgb_p_all.append(Pgb_p)
 
         errors.append(e)
@@ -346,6 +357,7 @@ def scenario_mpc():
             [Pbc[-1], Pbd[-1], Uk_temp[2], Uk_temp[3]],
             E[E.time == current_time].price.values[0] / actions_per_hour,
             e,
+            Pgb_p_all[-1],
         )
 
         utils.print_status(
@@ -393,8 +405,6 @@ def scenario_mpc():
 
     p.plot_data([np.asarray(errors)], title="Errors", logpath=logpath)
 
-    print(np.sum(pv_measured) / len(pv_measured))
-    print(np.sum(l_measured) / len(l_measured))
     p.plot_data(
         np.asarray([pv_measured, l_measured]),
         title="PV and Load",

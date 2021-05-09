@@ -148,7 +148,7 @@ class ScenarioOCP:
 
         if k != self.N - 1:
             J_scen += (
-                0.0001
+                0
                 * (
                     100
                     * (
@@ -215,6 +215,7 @@ class ScenarioOCP:
                     + self.s_data[scenario, "data", k, "pv"]
                     - self.s_data[scenario, "data", k, "l"],
                 ]
+
                 ineq_con = [
                     self.s[scenario, "states", k + 1, "Pgb_p"]
                     - self.s[scenario, "states", k, "Pgb_p"],
@@ -307,7 +308,7 @@ class ScenarioOCP:
         s_opt = self.s(s_opt)
         # print(j_opt)
 
-        i = self.N_scenarios - 1
+        i = int(np.floor(self.N_scenarios / 2))
         self.SOC = np.append(self.SOC, s_opt["scenario" + str(i), "states", 1, "SOC"])
         self.Pbc = np.append(self.Pbc, s_opt["scenario" + str(i), "inputs", 0, "Pbc"])
         self.Pbd = np.append(self.Pbd, s_opt["scenario" + str(i), "inputs", 0, "Pbd"])
@@ -331,6 +332,9 @@ class ScenarioOCP:
             u3.append(s_opt["scenario" + str(i), "inputs", 0, "Pgb"])
             u4.append(s_opt["scenario" + str(i), "inputs", 0, "Pgs"])
             soc.append(s_opt["scenario" + str(0), "states", 1, "SOC"])
+
+        print(u3, u4)
+        # print()
 
         self.SOC = np.append(self.SOC, np.mean(soc))
         self.Pbc = np.append(self.Pbc, np.mean(u1))

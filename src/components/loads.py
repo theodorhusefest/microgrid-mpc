@@ -64,17 +64,43 @@ class Load:
 
         return self.true[step : step + self.N + 1][1:]
 
-    def get_previous_day(self, current_time, days=1, measurement=None):
+    def get_minmax_day(self, current_time, step):
+        """
+        Extracts the days and returns the average day
+        """
+
+        num_datapoints = 24 * 60 / self.resolution
+        days = []
+        pred_start = current_time - timedelta(days=8)
+        one_week_df = self.df[(self.df["date"] > pred_start)]
+        grouped = one_week_df.groupby([one_week_df.date.dt.floor("d")], as_index=False)
+        for _, group in grouped:
+            if len(group) != num_datapoints:
+                continue
+            days.append(group[self.column].values)
+        min_ = np.asarray(days).min(axis=0)
+        max_ = np.asarray(days).max(axis=0)
+        return (
+            np.tile(min_, 2)[step % 144 + 1 : step % 144 + 1 + self.N],
+            np.tile(max_, 2)[step % 144 + 1 : step % 144 + 1 + self.N],
+        )
+
+    def get_previous_day(self, current_time, days=1, measurement=None, rounds=1):
         """
         Returns the same values the day before
         """
-        pred_start = current_time - timedelta(days=days)
 
-        pred = self.df[
-            (self.df["date"] > pred_start)
-            & (self.df["date"] <= (pred_start + timedelta(minutes=10 * self.N)))
-        ][self.column].values
+        preds = []
+        for i in range(rounds):
+            pred_start = current_time - timedelta(days=(i + 1) * days)
+            pred = self.df[
+                (self.df["date"] > pred_start)
+                & (self.df["date"] <= (pred_start + timedelta(minutes=10 * self.N)))
+            ][self.column].values
 
+            preds.append(pred)
+
+        pred = np.mean(preds, axis=0)
         if np.min(pred) > 1 and measurement:
             pred = self.interpolate_prediction(pred, measurement)
 

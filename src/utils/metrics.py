@@ -46,13 +46,13 @@ class SystemMetrics:
         """
         self.dependency_rate = 1 - (np.sum(Pgb) / np.sum(l[0 : len(Pgb)]))
 
-    def update_metrics(self, U, spot_price, e):
+    def update_metrics(self, U, spot_price, e, Pgb_p):
         """
         Updates all metrics
         """
         self.grid_cost += spot_price * (U[2] - 0.9 * U[3]) / self.actions_per_hour
         self.battery_cost += self.battery_deg * (U[0] + U[1]) / self.actions_per_hour
-        self.grid_max = np.max([self.grid_max, U[2]])
+        self.grid_max = np.max([self.grid_max, Pgb_p])
         self.accumulated_error += np.abs(e)
 
     def print_metrics(self, SOC):

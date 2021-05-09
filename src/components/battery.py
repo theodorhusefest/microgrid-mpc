@@ -50,6 +50,11 @@ class Battery:
         Fk = self.F(x0=self.xk_sim, p=uk)
         self.xk_sim = Fk["xf"].full().flatten()[0]
 
+        if self.xk_sim < 0.22:
+            self.xk_sim = 0.21
+        elif self.xk_sim > 0.78:
+            self.xk_sim = 0.79
+
         self.x_opt.append(x)
         self.xk_opt = x
         self.x_sim.append(self.xk_sim)
