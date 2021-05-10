@@ -29,4 +29,10 @@ GHI - MicroSCADA OPC DA.Skagerak_Microgrid.APL.1.P.PV1_RTU_P_MET.1058
 PAI - MicroSCADA OPC DA.Skagerak_Microgrid.APL.1.P.PV1_RTU_P_MET.1059
 Temp - MicroSCADA OPC DA.Skagerak_Microgrid.APL.1.P.PV1_RTU_P_MET.1051
 
-\copy "MicroSCADA OPC DA.Skagerak_Microgrid.APL.1.P.PV1_RTU_P_MET.1051" to temp.csv csv header;
+\copy "MicroSCADA OPC DA.Skagerak_Microgrid.APL.1.P.PV1_RTU_P_PM.82" to PV.csv csv header;
+\copy "MicroSCADA OPC DA.Skagerak_Microgrid.APL.1.P.NS4979_ELSPEC.79" to load.csv csv header;
+\copy "MicroSCADA OPC DA.Skagerak_Microgrid.APL.1.P.PV1_RTU_P_MET.1058" to GHI.csv csv header;
+\copy "MicroSCADA OPC DA.Skagerak_Microgrid.APL.1.P.PV1_RTU_P_MET.1059" to PAI.csv csv header;
+\copy "MicroSCADA OPC DA.Skagerak_Microgrid.APL.1.P.PV1_RTU_P_MET.1051" to air_temp.csv csv header;
+
+docker cp cineldi_postgresql:{PV.csv, load.csv, GHI.csv, PAI.csv, air_temp.csv} ./

@@ -25,6 +25,7 @@ class ScenarioOCP:
         self.Pg_max = conf_system["Pg_max"]
         self.battery_cost = conf_system["battery_cost"]
         self.peak_cost = conf_system["peak_cost"]
+        self.old_grid_fee = conf_system["old_grid_fee"]
         self.terminal_cost = conf_system["terminal_cost"]
         self.verbose = conf_system["verbose"]
 
@@ -140,25 +141,12 @@ class ScenarioOCP:
             self.s[scenario, "inputs", k, "Pgb"]
             - 0.9 * self.s[scenario, "inputs", k, "Pgs"]
         )
+        J_scen += self.old_grid_fee * self.s[scenario, "inputs", k, "Pgb"]
 
         J_scen += self.peak_cost * (
             self.s[scenario, "states", k + 1, "Pgb_p"]
             - self.s[scenario, "states", k, "Pgb_p"]
         )
-
-        if k != self.N - 1:
-            J_scen += (
-                0
-                * (
-                    100
-                    * (
-                        self.s[scenario, "states", k, "SOC"]
-                        - self.s[scenario, "states", k + 1, "SOC"]
-                    )
-                )
-                ** 2
-            )
-
         return J_scen
 
     def add_stage_cost_tracking(self, scenario, k):

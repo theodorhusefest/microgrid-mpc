@@ -1,25 +1,24 @@
-simulation_horizon: 58  # hours
-prediction_horizon: 10 # hours
+simulation_horizon: 720  # hours
+prediction_horizon: 5 # hours
 robust_horizon: 1 # steps
 branch_factor: 9
 perfect_predictions: False
 print_details: False
+foldername: test
 
 actions_per_hour: 6
 logpath: "./logs/"
-testfile: "./data/23.4_cleaned.csv"
-trainfile: "./data/23.4_train.csv"
+testfile: "./data/10.5_cleaned.csv"
+trainfile: "./data/10.5_train.csv"
 solcast_file: "./data/solcast_cleaned.csv"
 price_file: "./data/spot_prices.csv"
 openloop: False
-
 
 battery:
   x_initial: 0.7
   C_MAX: 1000
   nb_c: 0.913724
   nb_d: 0.95
-
 
 system:
   C_MAX: 1000
@@ -31,6 +30,7 @@ system:
   Pb_max: 1000
   Pg_max: 1000
   battery_cost: 0.01
-  peak_cost: 62
+  peak_cost: 0
+  old_grid_fee: 0.06
   terminal_cost: -600
   verbose: False

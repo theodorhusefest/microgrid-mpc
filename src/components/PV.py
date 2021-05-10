@@ -167,12 +167,6 @@ class LinearPhotovoltaic:
 
         y_pred = self.model.predict(X_val)
 
-        print(
-            "\nSuccessfully initilized linear PV model with RMSE {} on validation set.".format(
-                np.sqrt(mean_squared_error(y_val, y_pred))
-            )
-        )
-
     def get_mean_day(self, column):
         """
         Extracts the days and returns the average day

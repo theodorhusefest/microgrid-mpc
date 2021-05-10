@@ -40,6 +40,6 @@ def get_historic_spotprices(start, stop=None):
 
 
 if __name__ == "__main__":
-    spot_prices = get_historic_spotprices(datetime(2021, 3, 18))
+    spot_prices = get_historic_spotprices(datetime(2021, 3, 17))
 
     spot_prices.to_csv("./spot_prices.csv")

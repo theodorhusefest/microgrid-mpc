@@ -1,4 +1,5 @@
 import time
+import logging
 import progressbar
 import numpy as np
 import pandas as pd
@@ -27,12 +28,16 @@ def scenario_mpc():
     testfile = conf["testfile"]
     trainfile = conf["trainfile"]
 
+    foldername = conf["foldername"]
+    # logpath = utils.create_logs_folder(conf["logpath"], foldername)
     logpath = None
-    log = input("Log this run? ")
 
-    if log in ["y", "yes", "Yes"]:
-        foldername = input("Enter logfolder name? (enter to skip) ")
-        logpath = utils.create_logs_folder(conf["logpath"], foldername)
+    logging.basicConfig(
+        filename="./logs/all_logs.log",
+        filemode="a",
+        format="%(name)s - %(levelname)s - %(message)s",
+        level=logging.INFO,
+    )
 
     openloop = conf["openloop"]
     perfect_predictions = conf["perfect_predictions"]
