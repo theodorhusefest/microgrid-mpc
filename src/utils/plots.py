@@ -1,5 +1,7 @@
 import numpy as np
+import seaborn as sn
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 
 MINUTES_PER_HOUR = 60
 FONTSIZE = 15
@@ -28,7 +30,7 @@ def plot_SOC(
     ax.set_ylim([25, 95])
     if logpath:
         try:
-            fig.savefig("{}-{}".format(logpath, title + ".eps"), format="eps")
+            fig.savefig("{}-{}".format(logpath, title + ".png"), format="png")
         except:
             pass
 
@@ -61,9 +63,71 @@ def plot_control_actions(
     ax.legend(legends, fontsize=FONTSIZE)
     if logpath:
         try:
-            fig.savefig("{}-{}".format(logpath, title + ".eps"), format="eps")
+            fig.savefig("{}-{}".format(logpath, title + ".png"), format="png")
         except:
             pass
+
+
+def plot_from_df(
+    df,
+    columns,
+    title="",
+    ylabel="Power [kW]",
+    upsample=False,
+    legends=[],
+    ax=None,
+    xlabel="Date",
+):
+    df = df.copy()
+    if upsample:
+        df = df.resample("1T").ffill()
+    sn.set_theme(
+        context="paper",
+        style="white",
+        font_scale=1.8,
+        rc={"lines.linewidth": 2},
+        palette="tab10",
+    )
+
+    if not ax:
+        fig, ax = plt.subplots(figsize=FIGSIZE)
+
+    for c in columns:
+        ax.plot(df.index, df[c])
+
+    locator = mdates.AutoDateLocator()  # minticks=3, maxticks=7)
+    formatter = mdates.ConciseDateFormatter(locator)
+    formatter.formats = [
+        "%y",  # ticks are mostly years
+        "%b",  # ticks are mostly months
+        "%d",  # ticks are mostly days
+        "%H:%M",  # hrs
+        "%H:%M",  # min
+        "%S.%f",
+    ]  # secs
+    # these are mostly just the level above...
+    formatter.zero_formats = [""] + formatter.formats[:-1]
+    # ...except for ticks that are mostly hours, then it is nice to have
+    # month-day:
+    formatter.zero_formats[3] = "%d-%b"
+
+    formatter.offset_formats = [
+        "",
+        "%Y",
+        "%b %Y",
+        "%d %b %Y",
+        "%d %b %Y",
+        "%d %b %Y %H:%M",
+    ]
+    ax.xaxis.set_major_locator(locator)
+    ax.xaxis.set_major_formatter(formatter)
+
+    ax.xaxis.set_major_locator(locator)
+    ax.xaxis.set_major_formatter(formatter)
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.legend(legends)
 
 
 def plot_data(
@@ -74,22 +138,28 @@ def plot_data(
     xlabel="Time [h]",
     ylabel="Power [kW]",
     ax=None,
+    time_stamps=None,
 ):
     """
     Plots the given series
     """
     if not ax:
         fig, ax = plt.subplots(figsize=FIGSIZE)
-    t = np.linspace(0, int(series[0].shape[0] / 6), series[0].shape[0])
+    if time_stamps:
+        t = time_stamps
+    else:
+        t = np.linspace(0, int(series[0].shape[0] / 6), series[0].shape[0])
+
     for serie in series:
         ax.plot(t, serie)
+
     ax.set_title(title, fontsize=FONTSIZE)
     ax.set_xlabel(xlabel, fontsize=FONTSIZE)
     ax.set_ylabel(ylabel, fontsize=FONTSIZE)
     ax.legend(legends, fontsize=FONTSIZE)
     if logpath:
         try:
-            fig.savefig("{}-{}".format(logpath, title + ".eps"), format="eps")
+            fig.savefig("{}-{}".format(logpath, title + ".png"), format="png")
         except:
             pass
 
@@ -110,7 +180,7 @@ def plot_predictions_subplots(PV, pv_preds, PL, pl_preds, logpath):
         ax=ax2,
     )
     if logpath:
-        fig.savefig("{}{}".format(logpath, "PV_PL_arima" + ".eps"), format="eps")
+        fig.savefig("{}{}".format(logpath, "PV_PL_arima" + ".png"), format="png")
 
 
 def plot_SOC_control_subplots(x, u, horizon, logpath=None):
@@ -119,4 +189,4 @@ def plot_SOC_control_subplots(x, u, horizon, logpath=None):
     plot_control_actions(u, horizon, 6, ax=ax2)
 
     if logpath:
-        fig.savefig("{}{}".format(logpath, "SOC_U_arima" + ".eps"), format="eps")
+        fig.savefig("{}{}".format(logpath, "SOC_U_arima" + ".png"), format="png")

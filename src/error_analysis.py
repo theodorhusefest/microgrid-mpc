@@ -26,7 +26,9 @@ def load_analysis(N, L, data, plot=True):
             & (data["date"] <= (current_time + timedelta(minutes=10 * N)))
         ][L.column].values
 
-        L_pred = L.get_previous_day(current_time, measurement=data.L.iloc[i], days=days)
+        # L_pred = L.get_previous_day(current_time, measurement=data.L.iloc[i], days=days)
+        L_pred, _, _ = L.get_statistic_scenarios(current_time, i)
+        L_pred = L.interpolate_prediction(L_pred, data.L.iloc[i])
 
         error_df[i - time_skipped] = L_true - L_pred
         rmse.append(np.sqrt(mean_squared_error(L_true, L_pred)))
@@ -50,8 +52,8 @@ def load_analysis(N, L, data, plot=True):
         # plot_daily_errors(error_df.values, "PV")
         plot_error_hist(error_df.values, "Load")
         plt.show()
-    # error_df["date"] = data.date.iloc[time_skipped : data.shape[0] - N].values
-    # error_df["rmse"] = rmse
+    error_df["date"] = data.date.iloc[time_skipped : data.shape[0] - N].values
+    error_df["rmse"] = rmse
     return error_df
 
 
@@ -225,9 +227,13 @@ def estimate_errors(N, PV, train_file, test_file, forecast_file, stopdate=None):
 
     if not stopdate:
         stopdate = datetime(2100, 12, 30)
-    L = Load(N, train_file, "L")
+
     test_data = pd.read_csv(train_file, parse_dates=["date"])
-    load_errors = load_analysis(N, L, test_data, plot=False)
+
+    current_time = test_data.date[0]
+
+    L = Load(N, train_file, "L", current_time)
+    load_errors = load_analysis(N, L, test_data, plot=True)
 
     observations = pd.read_csv(train_file, parse_dates=["date"]).fillna(0)
     solcast_forecasts = pd.read_csv(
@@ -246,7 +252,7 @@ def estimate_errors(N, PV, train_file, test_file, forecast_file, stopdate=None):
     # load_errors = load_errors.loc[~(load_errors == 0).all(axis=1)]
 
     # pv_errors.to_csv("./data/pv_errors_date_1.csv")
-    load_errors.to_csv("./data/load_errors.csv")
+    load_errors.to_csv("./data/load_errors_date.csv")
 
     return pv_errors, load_errors
 

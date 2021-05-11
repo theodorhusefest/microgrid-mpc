@@ -53,6 +53,9 @@ def create_datafile(signals, names=[], logpath=None):
 
     df = pd.DataFrame.from_dict(data, orient="index")
     df = df.transpose()
+
+    if logpath:
+        df.to_csv(logpath + "signals.csv")
     return df
 
 

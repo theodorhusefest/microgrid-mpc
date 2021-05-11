@@ -28,9 +28,10 @@ def scenario_mpc():
     testfile = conf["testfile"]
     trainfile = conf["trainfile"]
 
-    foldername = conf["foldername"]
-    # logpath = utils.create_logs_folder(conf["logpath"], foldername)
     logpath = None
+    foldername = conf["foldername"]
+    if foldername:
+        logpath = utils.create_logs_folder(conf["logpath"], foldername)
 
     logging.basicConfig(
         filename="./logs/all_logs.log",
@@ -75,7 +76,7 @@ def scenario_mpc():
 
     E = pd.read_csv(conf["price_file"], parse_dates=["time"])
 
-    l = Load(N, testfile, "L", groundtruth=trainfile)
+    l = Load(N, testfile, "L", current_time, groundtruth=trainfile)
     B = Battery(T, N, **conf["battery"])
     PV = LinearPhotovoltaic(trainfile)
 
@@ -94,10 +95,9 @@ def scenario_mpc():
     l_measured = []
     errors = []
     E_measured = []
+    time_stamps = [current_time]
 
     prediction_time = 0
-    simulation_time = 0
-    reduction_time = 0
     solver_time = 0
 
     # Build reference tree
@@ -163,9 +163,12 @@ def scenario_mpc():
             pv_prediction = PV.predict(
                 ref.temp.values, ref.GHI.values, obs["PV"].iloc[0]
             )
-            l_prediction = l.get_previous_day(
-                current_time, measurement=l_true, days=7, rounds=2
+
+            l_prediction, l_lower, l_upper = l.get_statistic_scenarios(
+                current_time, step
             )
+            l_prediction = l.interpolate_prediction(l_prediction, l_true)
+
             prediction_time += time.time() - pred_time
 
         if N_scenarios == 1:
@@ -264,6 +267,8 @@ def scenario_mpc():
         pv_measured.append(pv_true)
         l_measured.append(l_true)
         E_measured.append(E_prediction[0])
+        time_stamps.append(current_time)
+
         Uk_temp = np.copy(Uk_opt)
 
         e, uk = utils.primary_controller(
@@ -330,36 +335,79 @@ def scenario_mpc():
     ax1.set_title("PV")
     ax2.set_title("Load")
 
+    df = utils.create_datafile(
+        [
+            time_stamps[1:],
+            100 * np.asarray(B.x_sim[1:]),
+            100 * np.asarray(B.x_opt[1:]),
+            np.asarray(Pbc) - np.asarray(Pbd),
+            np.asarray(Pgb) - np.asarray(Pgs),
+            ocp.Pbc - ocp.Pbd,
+            ocp.Pgb - ocp.Pgs,
+            np.asarray(errors),
+            pv_measured,
+            l_measured,
+            E_measured,
+            Pgb_p_all[1:],
+        ],
+        [
+            "date",
+            "SOC_sim",
+            "SOC_opt",
+            "Pb_sim",
+            "Pg_sim",
+            "Pb_opt",
+            "Pg_opt",
+            "Errors",
+            "PV",
+            "Load",
+            "Spot_prices",
+            "P_peak",
+        ],
+        logpath=logpath,
+    ).set_index("date")
+
     # Plotting
     u = np.asarray(
         [np.asarray(Pbc) - np.asarray(Pbd), np.asarray(Pgb) - np.asarray(Pgs)]
     )
-
-    p.plot_control_actions(
-        np.asarray([ocp.Pbc - ocp.Pbd, ocp.Pgb - ocp.Pgs]),
-        horizon - T,
-        actions_per_hour,
-        logpath,
-        legends=["Battery", "Grid"],
-        title="Optimal Control Actions",
+    p.plot_from_df(
+        df,
+        ["Pb_sim"],
+        title="Battery Action",
+        upsample=True,
+        legends=["Battery"],
     )
 
-    p.plot_control_actions(
-        u,
-        horizon - T,
-        actions_per_hour,
-        logpath,
-        legends=["Battery", "Grid"],
-        title="Simulated Control Actions",
+    p.plot_from_df(
+        df,
+        ["Pg_sim", "Pg_opt", "P_peak"],
+        title="Grid Control Actions",
+        upsample=True,
+        legends=["Corrected", "Optimal", "Peak"],
+    )
+    p.plot_from_df(
+        df,
+        ["SOC_sim"],
+        ylabel="SOC [%]",
+        title="State of Charge",
+    )
+    p.plot_from_df(
+        df,
+        ["PV", "Load"],
+        title="Measured PV and Load",
+        upsample=True,
+        legends=["PV", "Load"],
     )
 
-    p.plot_data(
-        np.asarray([B.x_sim, B.x_opt]),
-        title="State of charge",
-        legends=["SOC", "SOC_opt"],
-        logpath=logpath,
+    p.plot_from_df(
+        df,
+        ["Spot_prices"],
+        title="Spot Prices",
+        upsample=True,
     )
 
+    """    
     p.plot_data([np.asarray(errors)], title="Errors", logpath=logpath)
 
     p.plot_data(
@@ -367,6 +415,7 @@ def scenario_mpc():
         title="PV and Load",
         legends=["PV", "Load"],
         logpath=logpath,
+        time_stamps=time_stamps[1:],
     )
 
     p.plot_data(
@@ -382,11 +431,12 @@ def scenario_mpc():
         legends=["Peak Power"],
         logpath=logpath,
     )
-
+    """
     if logpath:
         fig1.savefig("{}-{}".format(logpath, "pv_scenarios" + ".eps"), format="eps")
         fig2.savefig("{}-{}".format(logpath, "load_scenarios" + ".eps"), format="eps")
     if True:
+        plt.tight_layout()
         plt.show(block=True)
 
 

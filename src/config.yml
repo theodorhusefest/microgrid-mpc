@@ -1,7 +1,7 @@
-simulation_horizon: 720  # hours
+simulation_horizon: 10 # hours
 prediction_horizon: 5 # hours
 robust_horizon: 1 # steps
-branch_factor: 9
+branch_factor: 1
 perfect_predictions: False
 print_details: False
 foldername: test
@@ -30,7 +30,7 @@ system:
   Pb_max: 1000
   Pg_max: 1000
   battery_cost: 0.01
-  peak_cost: 0
-  old_grid_fee: 0.06
+  peak_cost: 62
+  old_grid_fee: 0
   terminal_cost: -600
   verbose: False

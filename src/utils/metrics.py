@@ -100,7 +100,7 @@ class SystemMetrics:
         self.grid_max = np.max([self.grid_max, Pgb_p])
         self.accumulated_error += np.abs(e)
         self.primary_cost += spot_price * (1.1 * primary_buy - 0.81 * primary_sell)
-        self.old_system_cost += 0.06 * U[2]
+        self.old_system_cost += self.old_grid_fee * U[2]
         self.steps += 1
         self.computational_time += step_time
         self.worst_case = np.max([self.worst_case, step_time])

@@ -267,6 +267,7 @@ class ScenarioOCP:
         s_opt = self.s(s_opt)
 
         i = int(np.floor(self.N_scenarios / 2))
+        i = argmax
         self.SOC = np.append(self.SOC, s_opt["scenario" + str(i), "states", 1, "SOC"])
         self.Pbc = np.append(self.Pbc, s_opt["scenario" + str(i), "inputs", 0, "Pbc"])
         self.Pbd = np.append(self.Pbd, s_opt["scenario" + str(i), "inputs", 0, "Pbd"])
