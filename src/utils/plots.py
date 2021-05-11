@@ -6,6 +6,13 @@ import matplotlib.dates as mdates
 MINUTES_PER_HOUR = 60
 FONTSIZE = 15
 FIGSIZE = (10, 5)
+sn.set_theme(
+    context="paper",
+    style="white",
+    font_scale=1.8,
+    rc={"lines.linewidth": 2},
+    palette="tab10",
+)
 
 
 def plot_SOC(
@@ -33,6 +40,34 @@ def plot_SOC(
             fig.savefig("{}-{}".format(logpath, title + ".png"), format="png")
         except:
             pass
+
+
+def get_formatter():
+    locator = mdates.AutoDateLocator()
+    formatter = mdates.ConciseDateFormatter(locator)
+    formatter.formats = [
+        "%y",  # ticks are mostly years
+        "%b",  # ticks are mostly months
+        "%d",  # ticks are mostly days
+        "%H:%M",  # hrs
+        "%H:%M",  # min
+        "%S.%f",
+    ]  # secs
+    # these are mostly just the level above...
+    formatter.zero_formats = [""] + formatter.formats[:-1]
+    # ...except for ticks that are mostly hours, then it is nice to have
+    # month-day:
+    formatter.zero_formats[3] = "%d-%b"
+
+    formatter.offset_formats = [
+        "",
+        "%Y",
+        "%b %Y",
+        "%d %b %Y",
+        "%d %b %Y",
+        "%d %b %Y %H:%M",
+    ]
+    return locator, formatter
 
 
 def plot_control_actions(
@@ -77,17 +112,11 @@ def plot_from_df(
     legends=[],
     ax=None,
     xlabel="Date",
+    logpath=None,
 ):
     df = df.copy()
     if upsample:
         df = df.resample("1T").ffill()
-    sn.set_theme(
-        context="paper",
-        style="white",
-        font_scale=1.8,
-        rc={"lines.linewidth": 2},
-        palette="tab10",
-    )
 
     if not ax:
         fig, ax = plt.subplots(figsize=FIGSIZE)
@@ -95,30 +124,7 @@ def plot_from_df(
     for c in columns:
         ax.plot(df.index, df[c])
 
-    locator = mdates.AutoDateLocator()  # minticks=3, maxticks=7)
-    formatter = mdates.ConciseDateFormatter(locator)
-    formatter.formats = [
-        "%y",  # ticks are mostly years
-        "%b",  # ticks are mostly months
-        "%d",  # ticks are mostly days
-        "%H:%M",  # hrs
-        "%H:%M",  # min
-        "%S.%f",
-    ]  # secs
-    # these are mostly just the level above...
-    formatter.zero_formats = [""] + formatter.formats[:-1]
-    # ...except for ticks that are mostly hours, then it is nice to have
-    # month-day:
-    formatter.zero_formats[3] = "%d-%b"
-
-    formatter.offset_formats = [
-        "",
-        "%Y",
-        "%b %Y",
-        "%d %b %Y",
-        "%d %b %Y",
-        "%d %b %Y %H:%M",
-    ]
+    locator, formatter = get_formatter()
     ax.xaxis.set_major_locator(locator)
     ax.xaxis.set_major_formatter(formatter)
 
@@ -128,6 +134,28 @@ def plot_from_df(
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
     ax.legend(legends)
+
+    if logpath:
+        plt.savefig(logpath + title + ".png", format="png")
+
+
+def format_figure(
+    fig, ax, title="", xlabel="Date", ylabel="Power [kW]", legends=[], logpath=None
+):
+
+    locator, formatter = get_formatter()
+    ax.xaxis.set_major_locator(locator)
+    ax.xaxis.set_major_formatter(formatter)
+
+    ax.xaxis.set_major_locator(locator)
+    ax.xaxis.set_major_formatter(formatter)
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.legend(legends)
+
+    if logpath:
+        plt.savefig(logpath + title + ".png", format="png")
 
 
 def plot_data(

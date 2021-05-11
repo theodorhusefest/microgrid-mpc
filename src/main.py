@@ -63,7 +63,6 @@ def scenario_mpc():
     pv_scenario_file = pd.read_csv("./data/pv_scenarios.csv")
 
     current_time = observations.date.iloc[0]
-    print("Starting simulation at ", current_time)
 
     forecast = solcast_forecasts[
         solcast_forecasts["collected"] == current_time - timedelta(minutes=60)
@@ -111,8 +110,8 @@ def scenario_mpc():
     s0, lbs, ubs, lbg, ubg = ocp.build_scenario_ocp()
 
     sys_metrics = metrics.SystemMetrics()
-    fig1, ax1 = plt.subplots()
-    fig2, ax2 = plt.subplots()
+    fig1, ax1 = plt.subplots(figsize=p.FIGSIZE)
+    fig2, ax2 = plt.subplots(figsize=p.FIGSIZE)
 
     filter_ = [str(i) for i in range(N)]
     prob = [1, 1, 1]
@@ -377,6 +376,7 @@ def scenario_mpc():
         title="Battery Action",
         upsample=True,
         legends=["Battery"],
+        logpath=logpath,
     )
 
     p.plot_from_df(
@@ -385,12 +385,14 @@ def scenario_mpc():
         title="Grid Control Actions",
         upsample=True,
         legends=["Corrected", "Optimal", "Peak"],
+        logpath=logpath,
     )
     p.plot_from_df(
         df,
         ["SOC_sim"],
         ylabel="SOC [%]",
         title="State of Charge",
+        logpath=logpath,
     )
     p.plot_from_df(
         df,
@@ -398,6 +400,7 @@ def scenario_mpc():
         title="Measured PV and Load",
         upsample=True,
         legends=["PV", "Load"],
+        logpath=logpath,
     )
 
     p.plot_from_df(
@@ -405,36 +408,12 @@ def scenario_mpc():
         ["Spot_prices"],
         title="Spot Prices",
         upsample=True,
-    )
-
-    """    
-    p.plot_data([np.asarray(errors)], title="Errors", logpath=logpath)
-
-    p.plot_data(
-        np.asarray([pv_measured, l_measured]),
-        title="PV and Load",
-        legends=["PV", "Load"],
-        logpath=logpath,
-        time_stamps=time_stamps[1:],
-    )
-
-    p.plot_data(
-        np.asarray([E_measured]),
-        title="Spot Prices",
-        legends=["Spotprice"],
         logpath=logpath,
     )
 
-    p.plot_data(
-        np.asarray([Pgb_p_all]),
-        title="Peak Power",
-        legends=["Peak Power"],
-        logpath=logpath,
-    )
-    """
-    if logpath:
-        fig1.savefig("{}-{}".format(logpath, "pv_scenarios" + ".eps"), format="eps")
-        fig2.savefig("{}-{}".format(logpath, "load_scenarios" + ".eps"), format="eps")
+    p.format_figure(fig1, ax1, title="PV Scenarios", logpath=logpath)
+    p.format_figure(fig2, ax2, title="Load Scenarios", logpath=logpath)
+
     if True:
         plt.tight_layout()
         plt.show(block=True)
