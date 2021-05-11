@@ -29,12 +29,14 @@ def scenario_mpc():
     trainfile = conf["trainfile"]
 
     logpath = None
+    loggerpath = "./logs/all_logs.log"
     foldername = conf["foldername"]
     if foldername:
         logpath = utils.create_logs_folder(conf["logpath"], foldername)
+        loggerpath = logpath + "logs.log"
 
     logging.basicConfig(
-        filename="./logs/all_logs.log",
+        filename=loggerpath,
         filemode="a",
         format="%(name)s - %(levelname)s - %(message)s",
         level=logging.INFO,
