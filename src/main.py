@@ -4,6 +4,7 @@ import progressbar
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.cm import get_cmap
 from datetime import datetime, timedelta
 
 import utils.plots as p
@@ -57,7 +58,7 @@ def scenario_mpc():
 
     # Get data
     observations = pd.read_csv(testfile, parse_dates=["date"]).fillna(0)
-    observations = observations[observations["date"] >= datetime(2021, 4, 7)]
+    observations = observations[observations["date"] >= datetime(2021, 4, 15)]
     solcast_forecasts = pd.read_csv(
         conf["solcast_file"], parse_dates=["time", "collected"]
     ).fillna(0)
@@ -112,8 +113,9 @@ def scenario_mpc():
     s0, lbs, ubs, lbg, ubg = ocp.build_scenario_ocp()
 
     sys_metrics = metrics.SystemMetrics()
-    fig1, ax1 = plt.subplots(figsize=p.FIGSIZE)
-    fig2, ax2 = plt.subplots(figsize=p.FIGSIZE)
+    fig1, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 7))
+    plt.subplots_adjust(hspace=0.3)
+    # fig2, ax2 = plt.subplots(figsize=p.FIGSIZE)
 
     filter_ = [str(i) for i in range(N)]
     prob = [1, 1, 1]
@@ -214,7 +216,51 @@ def scenario_mpc():
             prob = np.multiply(pv_probs, l_probs)
             prob /= np.sum(prob)  # Scale to one
 
-            if N_scenarios == 9:
+            if N_scenarios == 7:
+                pv_scenarios = [
+                    pv_upper,
+                    pv_upper,
+                    pv_prediction,
+                    pv_prediction,
+                    pv_prediction,
+                    pv_lower,
+                    pv_lower,
+                ]
+                l_scenarios = [
+                    l_lower,
+                    l_prediction,
+                    l_lower,
+                    l_prediction,
+                    l_upper,
+                    l_prediction,
+                    l_upper,
+                ]
+                prob = np.multiply(
+                    np.asarray(
+                        [
+                            pv_probs[0],
+                            pv_probs[0],
+                            pv_probs[1],
+                            pv_probs[1],
+                            pv_probs[1],
+                            pv_probs[2],
+                            pv_probs[2],
+                        ]
+                    ),
+                    np.asarray(
+                        [
+                            l_probs[0],
+                            l_probs[1],
+                            l_probs[0],
+                            l_probs[1],
+                            l_probs[2],
+                            l_probs[1],
+                            l_probs[2],
+                        ]
+                    ),
+                )
+
+            elif N_scenarios == 9:
 
                 pv_scenarios = np.repeat(pv_scenarios, 3, axis=0)
                 l_scenarios = np.tile(l_scenarios, (3, 1))
@@ -222,15 +268,33 @@ def scenario_mpc():
                 prob = np.multiply(np.repeat(pv_probs, 3), np.tile(l_probs, 3))
                 prob /= np.sum(prob)
 
-        if step % 20 == 0:
+        if N_scenarios <= 3 and step % 18 == 0:
+            colors = [i for i in get_cmap("tab10").colors]
+            t_1 = [current_time + timedelta(minutes=10 * i) for i in range(N)]
+            if step == 0:
+                label_s = ["Upper", "Prediction", "Lower"]
+                label_obs = "Observation"
+            else:
+                label_s = [None] * 3
+                label_obs = None
             for i in range(len(pv_scenarios)):
-                ax1.plot(range(step, step + N), pv_scenarios[i], color="red")
-                ax2.plot(range(step, step + N), l_scenarios[i], color="red")
+                ax1.plot(
+                    t_1,
+                    pv_scenarios[i],
+                    label=label_s[1],
+                    color=colors[1],
+                )
+                ax2.plot(
+                    t_1,
+                    l_scenarios[i],
+                    label=label_s[1],
+                    color=colors[1],
+                )
 
-            ax1.plot(range(step, step + N), pv_prediction, color="blue")
-            ax1.plot(range(step, step + N), obs.PV[1:], color="green")
-            ax2.plot(range(step, step + N), l_prediction, color="blue")
-            ax2.plot(range(step, step + N), obs.L[1:], color="green")
+            # ax1.plot(range(step, step + N), pv_prediction, label = label_s, color = "blue")
+            ax1.plot(t_1, obs.PV[1:], label=label_obs, color=colors[0])
+            # ax2.plot(range(step, step + N), l_prediction, label = label_s, color = "blue")
+            ax2.plot(t_1, obs.L[1:], label=label_obs, color=colors[0])
 
         # Update parameters
         for i in range(N_scenarios):
@@ -323,10 +387,6 @@ def scenario_mpc():
             step_time,
         )
 
-        # utils.print_status(
-        #    step, [B.get_SOC(openloop)], step_time, every=int(simulation_horizon / 3)
-        # )
-
         bar.update(step)
 
     sys_metrics.calculate_consumption_rate(Pgs, pv_measured)
@@ -386,7 +446,7 @@ def scenario_mpc():
         ["Pg_sim", "Pg_opt", "P_peak"],
         title="Grid Control Actions",
         upsample=True,
-        legends=["Corrected", "Optimal", "Peak"],
+        legends=["Primary Control", "Optimal", "Peak Power"],
         logpath=logpath,
     )
     p.plot_from_df(
@@ -409,15 +469,30 @@ def scenario_mpc():
         df,
         ["Spot_prices"],
         title="Spot Prices",
+        ylabel="Price [NOK]",
         upsample=True,
         logpath=logpath,
     )
 
-    p.format_figure(fig1, ax1, title="PV Scenarios", logpath=logpath)
-    p.format_figure(fig2, ax2, title="Load Scenarios", logpath=logpath)
+    p.format_figure(
+        fig1,
+        ax1,
+        df.index,
+        title="PV Scenarios",
+        logpath=logpath,
+    )
+    p.format_figure(
+        fig1,
+        ax2,
+        df.index,
+        title="Load Scenarios",
+        logpath=logpath,
+    )
 
     if True:
-        plt.tight_layout()
+        fig1.tight_layout()
+        if logpath:
+            fig1.savefig(logpath + "Scenarios" + ".pdf", format="pdf")
         plt.show(block=True)
 
 

@@ -1,10 +1,10 @@
-simulation_horizon: 10 # hours
-prediction_horizon: 5 # hours
+simulation_horizon: 24 # hours
+prediction_horizon: 6 # hours
 robust_horizon: 1 # steps
 branch_factor: 1
 perfect_predictions: False
 print_details: False
-foldername: test
+foldername: preds
 
 actions_per_hour: 6
 logpath: "./logs/"
@@ -30,7 +30,7 @@ system:
   Pb_max: 1000
   Pg_max: 1000
   battery_cost: 0.01
-  peak_cost: 62
-  old_grid_fee: 0
-  terminal_cost: -600
+  peak_cost: 0
+  old_grid_fee: 0.06
+  terminal_cost: -800
   verbose: False

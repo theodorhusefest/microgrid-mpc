@@ -8,7 +8,7 @@ FONTSIZE = 15
 FIGSIZE = (10, 5)
 sn.set_theme(
     context="paper",
-    style="white",
+    style="whitegrid",
     font_scale=1.8,
     rc={"lines.linewidth": 2},
     palette="tab10",
@@ -37,7 +37,7 @@ def plot_SOC(
     ax.set_ylim([25, 95])
     if logpath:
         try:
-            fig.savefig("{}-{}".format(logpath, title + ".png"), format="png")
+            fig.savefig("{}-{}".format(logpath, title + ".pdf"), format="pdf")
         except:
             pass
 
@@ -96,9 +96,10 @@ def plot_control_actions(
     ax.set_ylabel(ylabel, fontsize=FONTSIZE)
     ax.set_title(title, fontsize=FONTSIZE)
     ax.legend(legends, fontsize=FONTSIZE)
+    plt.tight_layout()
     if logpath:
         try:
-            fig.savefig("{}-{}".format(logpath, title + ".png"), format="png")
+            fig.savefig("{}-{}".format(logpath, title + ".pdf"), format="pdf")
         except:
             pass
 
@@ -128,34 +129,38 @@ def plot_from_df(
     ax.xaxis.set_major_locator(locator)
     ax.xaxis.set_major_formatter(formatter)
 
-    ax.xaxis.set_major_locator(locator)
-    ax.xaxis.set_major_formatter(formatter)
-    ax.set_title(title)
+    ax.set_title(title, fontweight="bold")
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
     ax.legend(legends)
 
     if logpath:
-        plt.savefig(logpath + title + ".png", format="png")
+        plt.savefig(logpath + title + ".pdf", format="pdf")
 
 
 def format_figure(
-    fig, ax, title="", xlabel="Date", ylabel="Power [kW]", legends=[], logpath=None
+    fig,
+    ax,
+    time,
+    title="",
+    xlabel="Hours",
+    ylabel="Power [kW]",
+    legends=[],
+    logpath=None,
 ):
 
     locator, formatter = get_formatter()
-    ax.xaxis.set_major_locator(locator)
-    ax.xaxis.set_major_formatter(formatter)
 
     ax.xaxis.set_major_locator(locator)
     ax.xaxis.set_major_formatter(formatter)
-    ax.set_title(title)
+    # ax.set_xticklabels(time)
+    ax.set_title(title, fontweight="bold")
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
-    ax.legend(legends)
+    ax.legend()
 
     if logpath:
-        plt.savefig(logpath + title + ".png", format="png")
+        plt.savefig(logpath + title + ".pdf", format="pdf")
 
 
 def plot_data(
@@ -187,7 +192,7 @@ def plot_data(
     ax.legend(legends, fontsize=FONTSIZE)
     if logpath:
         try:
-            fig.savefig("{}-{}".format(logpath, title + ".png"), format="png")
+            fig.savefig("{}-{}".format(logpath, title + ".pdf"), format="pdf")
         except:
             pass
 
@@ -208,7 +213,7 @@ def plot_predictions_subplots(PV, pv_preds, PL, pl_preds, logpath):
         ax=ax2,
     )
     if logpath:
-        fig.savefig("{}{}".format(logpath, "PV_PL_arima" + ".png"), format="png")
+        fig.savefig("{}{}".format(logpath, "PV_PL_arima" + ".pdf"), format="pdf")
 
 
 def plot_SOC_control_subplots(x, u, horizon, logpath=None):
@@ -217,4 +222,4 @@ def plot_SOC_control_subplots(x, u, horizon, logpath=None):
     plot_control_actions(u, horizon, 6, ax=ax2)
 
     if logpath:
-        fig.savefig("{}{}".format(logpath, "SOC_U_arima" + ".png"), format="png")
+        fig.savefig("{}{}".format(logpath, "SOC_U_arima" + ".pdf"), format="pdf")

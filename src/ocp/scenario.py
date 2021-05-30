@@ -216,9 +216,7 @@ class ScenarioOCP:
                 ubg += [0] * len(eq_con) + [self.Pg_max] * 2
 
             # Add terminal cost
-            J_scen += (
-                self.terminal_cost * self.s[scenario, "states", self.N - 1, "SOC"] - 250
-            )
+            J_scen += self.terminal_cost * self.s[scenario, "states", self.N - 1, "SOC"]
 
             J += self.s_data[scenario, "data", 0, "prob"] * J_scen
 
@@ -267,7 +265,7 @@ class ScenarioOCP:
         s_opt = self.s(s_opt)
 
         i = int(np.floor(self.N_scenarios / 2))
-        i = argmax
+        # i = argmax
         self.SOC = np.append(self.SOC, s_opt["scenario" + str(i), "states", 1, "SOC"])
         self.Pbc = np.append(self.Pbc, s_opt["scenario" + str(i), "inputs", 0, "Pbc"])
         self.Pbd = np.append(self.Pbd, s_opt["scenario" + str(i), "inputs", 0, "Pbd"])
