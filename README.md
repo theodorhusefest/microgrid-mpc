@@ -13,8 +13,7 @@ Supervisors:
 - Phillip Maree
 
 
-All data used in the experiments can be found in src/data.   
-Figures used in thesis can be found in figs.
+All data used in the experiments can be found in src/data.  
 
 ## Installation
 
