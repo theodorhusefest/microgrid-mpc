@@ -1,36 +1,35 @@
 simulation_horizon: 24 # hours
 prediction_horizon: 6 # hours
-robust_horizon: 1 # steps
-branch_factor: 1
+N_scenarios: 1
 perfect_predictions: False
-print_details: False
-foldername: preds
 
+plot: True
+foldername: 
+
+start_year: 2021
+start_month: 4
+start_day: 7
 actions_per_hour: 6
 logpath: "./logs/"
-testfile: "./data/10.5_cleaned.csv"
+testfile: "./data/10.5_alldata.csv"
 trainfile: "./data/10.5_train.csv"
-solcast_file: "./data/solcast_cleaned.csv"
+solcast_file: "./data/solcast_forecasts.csv"
 price_file: "./data/spot_prices.csv"
-openloop: False
 
 battery:
   x_initial: 0.7
   C_MAX: 1000
-  nb_c: 0.913724
-  nb_d: 0.95
+  nb_c: 0.91
+  nb_d: 0.91
 
 system:
-  C_MAX: 1000
-  nb_c: 0.913724
-  nb_d: 0.95
   x_min: 0.2
   x_max: 0.8
   x_ref: 0.6
   Pb_max: 1000
   Pg_max: 1000
   battery_cost: 0.01
-  peak_cost: 0
-  old_grid_fee: 0.06
-  terminal_cost: -800
+  peak_cost: 52
+  old_grid_fee: 0
+  terminal_cost: -812
   verbose: False

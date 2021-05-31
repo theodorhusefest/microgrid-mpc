@@ -45,7 +45,7 @@ class Battery:
 
     def simulate_SOC(self, x, uk):
         """
-        Returns the simulated SOC
+        Simulates SOC and saves the results
         """
         Fk = self.F(x0=self.xk_sim, p=uk)
         self.xk_sim = Fk["xf"].full().flatten()[0]
@@ -59,8 +59,8 @@ class Battery:
         self.xk_opt = x
         self.x_sim.append(self.xk_sim)
 
-    def get_SOC(self, openloop):
-        if openloop:
-            return np.around(self.xk_opt, 3)
-        else:
-            return np.around(self.xk_sim, 3)
+    def get_SOC(self):
+        """
+        Returns the last value of SOC
+        """
+        return np.around(self.xk_sim, 3)

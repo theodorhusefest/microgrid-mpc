@@ -1,8 +1,7 @@
-import numpy as np
+""" Script to create new spotprice in src"""
 import pandas as pd
 from datetime import datetime, timedelta
 from nordpool import elspot
-from pprint import pprint
 
 
 def get_spot_price(end_date=None):
@@ -36,10 +35,15 @@ def get_historic_spotprices(start, stop=None):
         elif stop and (current_time >= datetime.now().date()):
             current_time = None
 
+    spot_prices = spot_prices.set_index("time").interpolate()
+    spot_prices.index = spot_prices.index.tz_localize(None)
+    spot_prices = spot_prices[~spot_prices.index.duplicated(keep="first")]
+    spot_prices.price = spot_prices.price / 1000
+
+    spot_prices.to_csv("../src/data/spot_prices.csv")
+
     return spot_prices
 
 
 if __name__ == "__main__":
-    spot_prices = get_historic_spotprices(datetime(2021, 3, 17))
-
-    spot_prices.to_csv("./spot_prices.csv")
+    get_historic_spotprices(datetime(2021, 3, 17))

@@ -1,7 +1,6 @@
 from casadi import *
 from casadi.tools import *
 from utils.helpers import parse_config
-from pprint import pprint
 import matplotlib.pyplot as plt
 
 
@@ -15,9 +14,9 @@ class ScenarioOCP:
         conf_system = conf["system"]
 
         # Get system constants
-        self.C_MAX = conf_system["C_MAX"]
-        self.nb_c = conf_system["nb_c"]
-        self.nb_d = conf_system["nb_d"]
+        self.C_MAX = conf["battery"]["C_MAX"]
+        self.nb_c = conf["battery"]["nb_c"]
+        self.nb_d = conf["battery"]["nb_d"]
         self.x_min = conf_system["x_min"]
         self.x_max = conf_system["x_max"]
         self.x_ref = conf_system["x_ref"]
@@ -149,18 +148,6 @@ class ScenarioOCP:
         )
         return J_scen
 
-    def add_stage_cost_tracking(self, scenario, k):
-        J_scen = 10 * ((0.5 - self.s[scenario, "states", k, "SOC"]) * 100) ** 2
-
-        J_scen += (
-            self.s[scenario, "inputs", k, "Pbc"] + self.s[scenario, "inputs", k, "Pbd"]
-        ) ** 2
-        J_scen += (
-            self.s[scenario, "inputs", k, "Pgb"] + self.s[scenario, "inputs", k, "Pgs"]
-        ) ** 2
-
-        return J_scen
-
     def build_scenario_ocp(self, root=None):
 
         J = 0
@@ -177,6 +164,7 @@ class ScenarioOCP:
             J_scen = 0
             scenario = "scenario" + str(j)
 
+            # Set state and inputs constraints
             lbs[scenario, "states", :, "SOC"] = self.x_min
             ubs[scenario, "states", :, "SOC"] = self.x_max
             ubs[scenario, "states", :, "Pgb_p"] = self.Pg_max

@@ -50,31 +50,6 @@ class Load:
         self.week_mean = np.tile(np.mean(week, axis=0), 2)
         self.weekend_mean = np.tile(np.mean(weekend, axis=0), 2)
 
-    def get_prediction_mean(self, step):
-        """
-        Returns the mean for the next N steps
-        """
-        return self.mean[step : step + self.N]
-
-    def scaled_mean_pred(self, measurement, step):
-        """
-        Returns the mean for the next N steps, scaled to current measurement
-        """
-        pred = (measurement / self.mean[step]) * self.mean[step : step + self.N + 1][1:]
-        return pred
-
-    def constant_pred(self, measurement, step):
-        """
-        Returns the current measurement as prediction for N
-        """
-        return measurement * np.ones(self.N)
-
-    def perfect_pred(self, step):
-        """
-        Returns the groundtruth for k+1 to N
-        """
-        return self.true[step : step + self.N + 1][1:]
-
     def get_statistic_scenarios(self, current_time, step):
         """
         Extracts the 90 percentiles scenarios based on two previous weeks
@@ -103,7 +78,7 @@ class Load:
 
         num_datapoints = 24 * 60 / self.resolution
         days = []
-        pred_start = current_time - timedelta(days=8)
+        pred_start = current_time - timedelta(days=16)
         one_week_df = self.df[(self.df["date"] > pred_start)]
         grouped = one_week_df.groupby([one_week_df.date.dt.floor("d")], as_index=False)
         for _, group in grouped:
@@ -117,35 +92,14 @@ class Load:
             np.tile(max_, 2)[step % 144 + 1 : step % 144 + 1 + self.N],
         )
 
-    def get_previous_day(self, current_time, days=1, measurement=None, rounds=1):
-        """
-        Returns the same values the day before
-        """
-
-        preds = []
-        for i in range(rounds):
-            pred_start = current_time - timedelta(days=(i + 1) * days)
-            pred = self.df[
-                (self.df["date"] > pred_start)
-                & (self.df["date"] <= (pred_start + timedelta(minutes=10 * self.N)))
-            ][self.column].values
-
-            preds.append(pred)
-
-        pred = np.mean(preds, axis=0)
-        if np.min(pred) > 1 and measurement:
-            pred = self.interpolate_prediction(pred, measurement)
-
-        return pred
-
-    def interpolate_prediction(self, pred, measurement):
+    def linear_mixture(self, pred, measurement):
         """
         Returns a linear combination of prediction and measurement
         """
 
-        pred_weight = np.append(np.linspace(0, 1, 12 + 1), np.ones(len(pred) - 12))
+        pred_weight = np.append(np.linspace(0, 1, 16 + 1), np.ones(len(pred) - 16))
         measurement_weight = np.append(
-            np.linspace(1, 0, 12 + 1), np.zeros(len(pred) - 12)
+            np.linspace(1, 0, 16 + 1), np.zeros(len(pred) - 16)
         )
         pred = np.append(np.asarray([measurement]), pred)
 

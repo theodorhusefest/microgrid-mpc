@@ -13,9 +13,8 @@ import utils.helpers as utils
 
 from components.loads import Load
 from ocp.scenario import ScenarioOCP
-from components.PV import Photovoltaic, LinearPhotovoltaic
+from components.PV import LinearPhotovoltaic
 from components.battery import Battery
-from utils.scenario_tree import build_scenario_tree
 
 
 def scenario_mpc():
@@ -43,27 +42,38 @@ def scenario_mpc():
         level=logging.INFO,
     )
 
-    openloop = conf["openloop"]
     perfect_predictions = conf["perfect_predictions"]
 
     actions_per_hour = conf["actions_per_hour"]
     horizon = conf["simulation_horizon"]
-    simulation_horizon = horizon * actions_per_hour
 
     T = conf["prediction_horizon"]
     N = conf["prediction_horizon"] * actions_per_hour
-    Nr = conf["robust_horizon"]
-    branch_factor = conf["branch_factor"]
-    N_scenarios = branch_factor ** Nr
+    N_scenarios = conf["N_scenarios"]
+
+    simulation_horizon = horizon * actions_per_hour
+
+    assert N_scenarios in [1, 3, 7, 9], "Only 1, 3, 7 or 9 branches allowed"
 
     # Get data
     observations = pd.read_csv(testfile, parse_dates=["date"]).fillna(0)
-    observations = observations[observations["date"] >= datetime(2021, 4, 15)]
+    observations = observations[
+        observations["date"]
+        >= datetime(conf["start_year"], conf["start_month"], conf["start_day"])
+    ]
+
+    assert (
+        simulation_horizon + N < observations.shape[0]
+    ), "Not enough data for simulation"
+
+    # Read forecast file
     solcast_forecasts = pd.read_csv(
         conf["solcast_file"], parse_dates=["time", "collected"]
     ).fillna(0)
-    load_scenario_file = pd.read_csv("./data/load_scenarios.csv")
-    pv_scenario_file = pd.read_csv("./data/pv_scenarios.csv")
+
+    # Read weighting files
+    load_weights = pd.read_csv("./data/load_weights.csv")
+    pv_weights = pd.read_csv("./data/pv_weights.csv")
 
     current_time = observations.date.iloc[0]
 
@@ -75,13 +85,14 @@ def scenario_mpc():
         (observations["date"] >= current_time)
         & (observations["date"] <= current_time + timedelta(minutes=10 * N))
     ]
-
+    # Initialize components
     E = pd.read_csv(conf["price_file"], parse_dates=["time"])
-
-    l = Load(N, testfile, "L", current_time, groundtruth=trainfile)
+    L = Load(N, testfile, "L", current_time)
     B = Battery(T, N, **conf["battery"])
     PV = LinearPhotovoltaic(trainfile)
+    sys_metrics = metrics.SystemMetrics()
 
+    # Define variables
     Pbc = []
     Pbd = []
     Pgs = []
@@ -92,6 +103,7 @@ def scenario_mpc():
 
     primary_Pgb = 0
     primary_Pgs = 0
+    prob = [1]
 
     pv_measured = []
     l_measured = []
@@ -101,27 +113,18 @@ def scenario_mpc():
 
     prediction_time = 0
     solver_time = 0
+    filter_ = [str(i) for i in range(N)]
 
-    # Build reference tree
-    _, _ = build_scenario_tree(
-        N, Nr, branch_factor, np.ones(N + 1), 0, np.ones(N + 1), 0
-    )
-
+    # Initialize and build optimal control problem
     ocp = ScenarioOCP(T, N, N_scenarios)
     s_data = ocp.s_data(0)
 
     s0, lbs, ubs, lbg, ubg = ocp.build_scenario_ocp()
 
-    sys_metrics = metrics.SystemMetrics()
+    # Initialize plots and progressbar
     fig1, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 7))
-    plt.subplots_adjust(hspace=0.3)
-    # fig2, ax2 = plt.subplots(figsize=p.FIGSIZE)
-
-    filter_ = [str(i) for i in range(N)]
-    prob = [1, 1, 1]
-
     bar = progressbar.ProgressBar(
-        maxval=simulation_horizon - N,
+        maxval=simulation_horizon,
         widgets=[
             progressbar.Bar("=", "[", "]"),
             " Finished with",
@@ -129,7 +132,9 @@ def scenario_mpc():
         ],
     )
     bar.start()
-    for step in range(simulation_horizon - N):
+
+    # MPC loop
+    for step in range(simulation_horizon):
 
         step_start = time.time()
 
@@ -167,10 +172,10 @@ def scenario_mpc():
                 ref.temp.values, ref.GHI.values, obs["PV"].iloc[0]
             )
 
-            l_prediction, l_lower, l_upper = l.get_statistic_scenarios(
+            l_prediction, l_lower, l_upper = L.get_statistic_scenarios(
                 current_time, step
             )
-            l_prediction = l.interpolate_prediction(l_prediction, l_true)
+            l_prediction = L.linear_mixture(l_prediction, l_true)
 
             prediction_time += time.time() - pred_time
 
@@ -179,32 +184,21 @@ def scenario_mpc():
             l_scenarios = [l_prediction]
 
         else:
-            if False:
 
-                l_min, l_max, _ = [
-                    utils.get_scenario_from_file(load_scenario_file, step, i, filter_)
-                    for i in range(3)
-                ]
-                l_lower = l_prediction - l_min
-                l_upper = l_prediction + l_max
-
-            elif True:
-                l_lower, l_upper = l.get_minmax_day(current_time, step)
-
+            # Construct scenarios and weights
+            l_lower, l_upper = L.get_minmax_day(current_time, step)
             l_probs = np.asarray(
                 [
-                    utils.get_probability_from_file(
-                        load_scenario_file, step, i, filter_
-                    )
+                    utils.get_probability_from_file(load_weights, step, i, filter_)
                     for i in range(3)
                 ]
             )
 
             pv_probs = np.asarray(
                 [
-                    utils.get_probability_from_file(pv_scenario_file, step, i, filter_)
+                    utils.get_probability_from_file(pv_weights, step, i, filter_)
                     for i in range(3)
-                ][::-1]
+                ]
             )
 
             pv_upper = PV.predict(ref.temp.values, ref.GHI90.values)
@@ -261,13 +255,13 @@ def scenario_mpc():
                 )
 
             elif N_scenarios == 9:
-
                 pv_scenarios = np.repeat(pv_scenarios, 3, axis=0)
                 l_scenarios = np.tile(l_scenarios, (3, 1))
 
                 prob = np.multiply(np.repeat(pv_probs, 3), np.tile(l_probs, 3))
                 prob /= np.sum(prob)
 
+        # Plot scenarios and predictions
         if N_scenarios <= 3 and step % 18 == 0:
             colors = [i for i in get_cmap("tab10").colors]
             t_1 = [current_time + timedelta(minutes=10 * i) for i in range(N)]
@@ -291,16 +285,14 @@ def scenario_mpc():
                     color=colors[1],
                 )
 
-            # ax1.plot(range(step, step + N), pv_prediction, label = label_s, color = "blue")
             ax1.plot(t_1, obs.PV[1:], label=label_obs, color=colors[0])
-            # ax2.plot(range(step, step + N), l_prediction, label = label_s, color = "blue")
             ax2.plot(t_1, obs.L[1:], label=label_obs, color=colors[0])
 
         # Update parameters
         for i in range(N_scenarios):
-            s0["scenario" + str(i), "states", 0, "SOC"] = B.get_SOC(openloop)
-            lbs["scenario" + str(i), "states", 0, "SOC"] = B.get_SOC(openloop)
-            ubs["scenario" + str(i), "states", 0, "SOC"] = B.get_SOC(openloop)
+            s0["scenario" + str(i), "states", 0, "SOC"] = B.get_SOC()
+            lbs["scenario" + str(i), "states", 0, "SOC"] = B.get_SOC()
+            ubs["scenario" + str(i), "states", 0, "SOC"] = B.get_SOC()
 
             s0["scenario" + str(i), "states", 0, "Pgb_p"] = Pgb_p
             lbs["scenario" + str(i), "states", 0, "Pgb_p"] = Pgb_p
@@ -337,7 +329,7 @@ def scenario_mpc():
         Uk_temp = np.copy(Uk_opt)
 
         e, uk = utils.primary_controller(
-            xk_opt, Uk_opt, obs["PV"].values[0], obs["L"].values[0]
+            B.get_SOC(), Uk_opt, obs["PV"].values[0], obs["L"].values[0]
         )
 
         Pgb_p = np.max([Pgb_p_all[-1], uk[2]])
@@ -350,6 +342,7 @@ def scenario_mpc():
         Pgb.append(uk[2])
         Pgs.append(uk[3])
 
+        # Calculate price from primary controller
         temp_sale_diff = uk[3] - Uk_temp[3]
         temp_buy_diff = uk[2] - Uk_temp[2]
 
@@ -389,12 +382,7 @@ def scenario_mpc():
 
         bar.update(step)
 
-    sys_metrics.calculate_consumption_rate(Pgs, pv_measured)
-    sys_metrics.calculate_dependency_rate(Pgb, l_measured)
     sys_metrics.print_metrics(B.x_sim, E_measured)
-
-    ax1.set_title("PV")
-    ax2.set_title("Load")
 
     df = utils.create_datafile(
         [
@@ -489,10 +477,10 @@ def scenario_mpc():
         logpath=logpath,
     )
 
-    if True:
+    if conf["plot"]:
         fig1.tight_layout()
         if logpath:
-            fig1.savefig(logpath + "Scenarios" + ".pdf", format="pdf")
+            fig1.savefig(logpath + "scenarios" + ".pdf", format="pdf")
         plt.show(block=True)
 
 

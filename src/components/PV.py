@@ -183,6 +183,9 @@ class LinearPhotovoltaic:
         return np.asarray(days).mean(axis=0)
 
     def predict(self, temp, GHI, measurement=None):
+        """
+        Main function used to predict the PV
+        """
         pred = self.model.predict(np.c_[temp, GHI]).flatten()
         pred = np.clip(pred, 0, np.inf)
         if np.max(pred) > 1 and measurement:
@@ -196,12 +199,3 @@ class LinearPhotovoltaic:
             pred = measurement_weight * measurement + pred_weight * pred
 
         return pred
-
-
-if __name__ == "__main__":
-    N = 12
-    PV = LinearPhotovoltaic("../data/8.4_train.csv")
-
-    data = pd.read_csv("../data/8.4_test.csv", parse_dates=["date"]).fillna(0)
-    data = data[data.date > datetime(2021, 4, 3, 14)].iloc[:N]
-    PV.predict(data.airTemp, data.GHI, measurement=300)
